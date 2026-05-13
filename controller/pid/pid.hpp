@@ -12,7 +12,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <math.h>
 
 namespace alg::pid {
 
@@ -79,7 +78,7 @@ public:
      */
     void SetShadow(const Config& cfg)
     {
-        shadowCfg_ = cfg;
+        shadowCfg_     = cfg;
         shadowPending_ = true;
     }
 
@@ -108,53 +107,53 @@ public:
      */
     float CalcAngle();
 
-    void SetKp(float v)            { cfg_.kp = v; }
-    void SetKi(float v)            { cfg_.ki = v; }
-    void SetKd(float v)            { cfg_.kd = v; }
-    void SetKf(float v)            { cfg_.kf = v; }
-    void SetIOutMax(float v)       { cfg_.iOutMax = v; }
-    void SetOutMax(float v)        { cfg_.outMax = v; }
-    void SetTarget(float v)        { target_ = v; }
-    void SetNow(float v)           { now_ = v; }
-    void SetIntegralError(float v) { integralError_ = v; }
+    void SetKp(float v)             { cfg_.kp = v; }
+    void SetKi(float v)             { cfg_.ki = v; }
+    void SetKd(float v)             { cfg_.kd = v; }
+    void SetKf(float v)             { cfg_.kf = v; }
+    void SetIOutMax(float v)        { cfg_.iOutMax = v; }
+    void SetOutMax(float v)         { cfg_.outMax = v; }
+    void SetTarget(float v)         { target_ = v; }
+    void SetNow(float v)            { now_ = v; }
+    void SetIntegralError(float v)  { integralError_ = v; }
 
     const Config& GetConfig() const { return cfg_; }
 
-    float GetKp()       const { return cfg_.kp; }
-    float GetKi()       const { return cfg_.ki; }
-    float GetKd()       const { return cfg_.kd; }
-    float GetKf()       const { return cfg_.kf; }
-    float GetOutMax()   const { return cfg_.outMax; }
-    float GetIOutMax()  const { return cfg_.iOutMax; }
-    float GetDt()       const { return cfg_.dt; }
+    float GetKp()             const { return cfg_.kp; }
+    float GetKi()             const { return cfg_.ki; }
+    float GetKd()             const { return cfg_.kd; }
+    float GetKf()             const { return cfg_.kf; }
+    float GetOutMax()         const { return cfg_.outMax; }
+    float GetIOutMax()        const { return cfg_.iOutMax; }
+    float GetDt()             const { return cfg_.dt; }
 
-    float GetOut()           const { return out_; }
-    float GetTarget()        const { return target_; }
-    float GetIntegralError() const { return integralError_; }
-    float GetError()         const { return preError_; }
+    float GetOut()            const { return out_; }
+    float GetTarget()         const { return target_; }
+    float GetIntegralError()  const { return integralError_; }
+    float GetError()          const { return preError_; }
 
 private:
 
-    static float Abs(float x)          { return fabsf(x); }
-    static void Clamp(float* v, float lo, float hi);
-
-    Config cfg_{};
-
-    /* 双缓冲：影子配置，Calc 开头原子切换 */
-    Config shadowCfg_{};
+    Config cfg_ {};
+    Config shadowCfg_ {};
     volatile bool shadowPending_ = false;
 
-    float target_       = 0.0f;
-    float now_          = 0.0f;
-    float out_          = 0.0f;
+    float target_        = 0.0f;
+    float now_           = 0.0f;
+    float out_           = 0.0f;
 
-    float preNow_       = 0.0f;
-    float preTarget_    = 0.0f;
-    float preOut_       = 0.0f;
-    float preError_     = 0.0f;
+    float preNow_        = 0.0f;
+    float preTarget_     = 0.0f;
+    float preOut_        = 0.0f;
+    float preError_      = 0.0f;
 
     float integralError_ = 0.0f;
     float dLpfOutput_    = 0.0f;
+
+    static void Clamp(float* v, float lo, float hi);
+
+    /** @brief 公共 PID 计算（双缓冲 → 死区 → 变速积分 → PID → 前馈 → 限幅） */
+    float CalcImpl(float error);
 };
 
 } // namespace alg::pid

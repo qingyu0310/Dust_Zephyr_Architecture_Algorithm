@@ -19,7 +19,7 @@ PowerCtrl::PowerCtrl(const Config& cfg)
     : cfg_(cfg)
     , k1_(cfg.k1Init)
     , k2_(cfg.k2Init)
-    , rls_(2, 1, cfg.rlsLambda, 1e-5f)
+    , rls_(cfg.rlsLambda, 1e-5f)
 {
     rlsInited_ = cfg.rlsEnable;
     if (rlsInited_) {

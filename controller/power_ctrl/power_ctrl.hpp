@@ -14,7 +14,7 @@
 
 namespace alg::power_ctrl {
 
-static constexpr uint8_t kMaxMotors = 4;
+inline constexpr uint8_t kMaxMotors = 4;
 
 /**
  * @brief  Per-motor state
@@ -106,9 +106,6 @@ public:
     float GetK2() const { return k2_; }
 
 private:
-    /* 二次方程求根: A·τ² + B·τ + C = 0 */
-    static float SolveTorque(float a, float b, float c, bool positive);
-
     Config cfg_;
 
     float k1_;     ///< copper-loss coefficient
@@ -117,10 +114,13 @@ private:
     MotorState motors_[kMaxMotors]{};
     float      membership_[kMaxMotors]{};
 
-    alg::rls::RLS rls_;   ///< 2-input, 1-output online identifier
+    alg::rls::RLS<2, 1> rls_;   ///< 2-input, 1-output online identifier
     bool rlsInited_ = false;
 
     float measuredPower_ = 0.0f;  ///< measured total power from power meter
+
+    /* 二次方程求根: A·τ² + B·τ + C = 0 */
+    static float SolveTorque(float a, float b, float c, bool positive);
 };
 
 } // namespace alg::power_ctrl
