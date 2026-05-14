@@ -20,15 +20,15 @@ inline constexpr uint8_t kMaxMotors = 4;
  * @brief  Per-motor state
  */
 struct MotorState {
-    float torque    = 0.0f;   ///< τ = current × torqueK
-    float omega     = 0.0f;   ///< ω = rpm / 9.55 (rad/s)
-    float torque2   = 0.0f;   ///< τ²
-    float omega2    = 0.0f;   ///< ω²
-    float powerPred = 0.0f;   ///< P_in = K1·τ² + K2·ω² + τ·ω + K3
-    float pidErr       = 0.0f;  ///< PID error (for membership)
-    float powerLimit    = 0.0f;  ///< allocated power budget for this motor
-    float targetCurrent = 0.0f; ///< PID target current (cascade input)
-    float currentOut    = 0.0f; ///< limited output current
+    float torque    = 0.0f;         ///< τ = current × torqueK
+    float omega     = 0.0f;         ///< ω = rpm / 9.55 (rad/s)
+    float torque2   = 0.0f;         ///< τ²
+    float omega2    = 0.0f;         ///< ω²
+    float powerPred = 0.0f;         ///< P_in = K1·τ² + K2·ω² + τ·ω + K3
+    float pidErr       = 0.0f;      ///< PID error (for membership)
+    float powerLimit    = 0.0f;     ///< allocated power budget for this motor
+    float targetCurrent = 0.0f;     ///< PID target current (cascade input)
+    float currentOut    = 0.0f;     ///< limited output current
 };
 
 /**
