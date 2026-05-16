@@ -2,6 +2,9 @@
 # 提供 PID/功率控制/滤波器/参数辨识等计算模块
 # 不直接依赖硬件，可在仿真或离线环境中使用
 # 头文件在 algorithm/controller/ 和 algorithm/identify/ 下
+
+rsource "tflm/Kconfig"
+
 config CTL_TIMER
     bool "软件定时器"
     default n
@@ -34,4 +37,5 @@ config MOD_CTL_POWER
     select FLT_LPF
     help
         电机功率控制，包含功率模型预测/RLS参数辨识/隶属度分配/受限力矩求解
+
 

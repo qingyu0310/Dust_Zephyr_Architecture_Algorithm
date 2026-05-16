@@ -20,5 +20,4 @@ if(CONFIG_MOD_CTL_POWER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/power_ctrl)
 endif()
 
-
-
+add_subdirectory(tflm)
