@@ -14,6 +14,8 @@
 #include <math.h>
 #include <string.h>
 
+#pragma message "Compiling Algorithm/Filter/Kalman"
+
 namespace alg::filter {
 
 namespace {

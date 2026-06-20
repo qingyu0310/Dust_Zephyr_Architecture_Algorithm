@@ -9,6 +9,8 @@
 #include "power_ctrl.hpp"
 #include <math.h>
 
+#pragma message "Compiling Algorithm/Controller/PowerCtrl"
+
 namespace alg::power_ctrl {
 
 /**

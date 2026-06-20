@@ -15,6 +15,8 @@
 #include <math.h>
 #include <string.h>
 
+#pragma message "Compiling Algorithm/Filter/QuaternionEkf"
+
 namespace {
 
 /* 初始状态转移矩阵为单位阵，Update() 中再按当前角速度填入四元数积分项。 */
