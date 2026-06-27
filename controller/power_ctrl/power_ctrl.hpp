@@ -2,8 +2,8 @@
  * @file power_ctrl.hpp
  * @author qingyu
  * @brief 电机功率控制器 — 模型预测 / RLS 在线辨识 / 隶属度分配 / 力矩限幅
- * @version 0.1
- * @date 2026-04-30
+ * @version 0.2
+ * @date 2026-06-27
  */
 
 #pragma once
@@ -12,8 +12,6 @@
 #include "rls.hpp"
 
 namespace alg::power_ctrl {
-
-inline constexpr uint8_t kMaxMotors = 4;
 
 /**
  * @brief  单电机状态
@@ -31,7 +29,9 @@ struct MotorState {
 };
 
 /**
- * @brief  单组电机功率控制器（如同一底盘 4 个电机）
+ * @brief  单组电机功率控制器（如底盘 4 个电机）
+ *
+ * @tparam kMotorCount  电机数量（编译期分配）
  *
  * @par 管线（每控制周期调用一次）：
  *       @n 1. SetMotorData(i, current, velocity, pidErr)   — 喂入各电机数据
@@ -43,11 +43,11 @@ struct MotorState {
  *       在线辨识 K1（铜损系数）和 K2（铁损系数）。
  *       K3 为固定常数损耗，不参与辨识。
  */
+template <uint8_t kMotorCount>
 class PowerCtrl final
 {
 public:
     struct Config {
-        uint8_t motorCount = 4;                 // 该组电机数量（≤ kMaxMotors）
         float   torqueK    = 4.577e-5f;         // 电流 → 转矩（M3508 常数）
         float   k1Init     = 1.453e-7f;         // RLS 初始 K1（铜损系数）
         float   k2Init     = 1.453e-7f;         // RLS 初始 K2（铁损系数）
@@ -78,16 +78,16 @@ public:
 private:
     Config cfg_;
 
-    float k1_ = 0.0f;     // 铜损系数
-    float k2_ = 0.0f;     // 铁损系数
+    float k1_ = 0.0f;                           // 铜损系数
+    float k2_ = 0.0f;                           // 铁损系数
 
-    MotorState motors_[kMaxMotors]{};
-    float      membership_[kMaxMotors]{};
+    MotorState motors_[kMotorCount]{};          // 各电机状态（转矩/转速/功率等）
+    float      membership_[kMotorCount]{};      // 各电机隶属度（功率分配系数 0~1）
 
-    alg::rls::RLS<2, 1> rls_;   // 2 输入 / 1 输出在线辨识器
+    alg::rls::RLS<2> rls_;                      // RLS 在线辨识器
     bool rlsInited_ = false;
 
-    float measuredPower_ = 0.0f;  // 功率计实测总功率
+    float measuredPower_ = 0.0f;                // 功率计实测总功率
 
     // 二次方程求根：A·τ² + B·τ + C = 0
     static float SolveTorque(float a, float b, float c, bool positive);

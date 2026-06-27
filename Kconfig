@@ -5,6 +5,13 @@
 
 rsource "tflm/Kconfig"
 
+config MATH_EIGEN
+    bool "Eigen 线性代数库"
+    default n
+    help
+        Eigen 5 header-only 线性代数库，提供矩阵/向量运算。
+        其他算法模块可通过 select MATH_EIGEN 自动启用。
+
 config CTL_TIMER
     bool "软件定时器"
     default n
@@ -45,6 +52,7 @@ config FLT_QUATERNION_EKF
 config ID_RLS
     bool "递归最小二乘法"
     default n
+    select MATH_EIGEN
     help
         递归最小二乘法
 

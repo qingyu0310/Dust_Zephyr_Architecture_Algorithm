@@ -2,14 +2,13 @@
  * @file power_ctrl.cpp
  * @author qingyu
  * @brief 电机功率控制器实现 — 模型预测 / RLS 辨识 / 隶属度分配 / 力矩限幅
- * @version 0.1
- * @date 2026-04-30
+ * @version 0.2
+ * @date 2026-06-27
  */
+#pragma message "Compiling Algorithm/Controller/PowerCtrl"
 
 #include "power_ctrl.hpp"
 #include <math.h>
-
-#pragma message "Compiling Algorithm/Controller/PowerCtrl"
 
 namespace alg::power_ctrl {
 
@@ -17,13 +16,15 @@ namespace alg::power_ctrl {
  * @brief 构造功率控制器，初始化 RLS
  * @param cfg 配置参数
  */
-PowerCtrl::PowerCtrl(const Config& cfg)
+template <uint8_t kMotorCount>
+PowerCtrl<kMotorCount>::PowerCtrl(const Config& cfg)
     : cfg_(cfg)
     , k1_(cfg.k1Init)
     , k2_(cfg.k2Init)
     , rls_(cfg.rlsLambda, 1e-5f)
 {
     rlsInited_ = cfg.rlsEnable;
+
     if (rlsInited_) {
         float w[2] = { k1_, k2_ };
         rls_.SetWeights(w);
@@ -34,31 +35,36 @@ PowerCtrl::PowerCtrl(const Config& cfg)
  * @brief 重配置功率控制器，清空状态
  * @param cfg 配置参数
  */
-void PowerCtrl::Init(const Config& cfg)
+template <uint8_t kMotorCount>
+void PowerCtrl<kMotorCount>::Init(const Config& cfg)
 {
     cfg_ = cfg;
     k1_ = cfg.k1Init;
     k2_ = cfg.k2Init;
     rlsInited_ = cfg.rlsEnable;
+
     if (rlsInited_) {
         float w[2] = { k1_, k2_ };
         rls_.SetWeights(w);
     }
+
     for (auto& m : motors_) m = MotorState{};
     for (auto& m : membership_) m = 0.0f;
+
     measuredPower_ = 0.0f;
 }
 
 /**
  * @brief 喂入单电机原始数据
- * @param idx     电机索引 [0, motorCount)
+ * @param idx     电机索引 [0, kMotorCount)
  * @param torque  实测转矩 (N·m)
  * @param omega   角速度 (rad/s)
  * @param pidErr  PID 误差（隶属度计算用）
  */
-void PowerCtrl::SetMotorData(uint8_t idx, float torque, float omega, float pidErr)
+template <uint8_t kMotorCount>
+void PowerCtrl<kMotorCount>::SetMotorData(uint8_t idx, float torque, float omega, float pidErr)
 {
-    if (idx >= cfg_.motorCount) return;
+    if (idx >= kMotorCount) return;
 
     auto& m = motors_[idx];
     m.torque   = torque;
@@ -73,9 +79,10 @@ void PowerCtrl::SetMotorData(uint8_t idx, float torque, float omega, float pidEr
  * @param idx      电机索引
  * @param current  目标电流
  */
-void PowerCtrl::SetTarget(uint8_t idx, float current)
+template <uint8_t kMotorCount>
+void PowerCtrl<kMotorCount>::SetTarget(uint8_t idx, float current)
 {
-    if (idx >= cfg_.motorCount) return;
+    if (idx >= kMotorCount) return;
     motors_[idx].targetCurrent = current;
 }
 
@@ -86,12 +93,13 @@ void PowerCtrl::SetTarget(uint8_t idx, float current)
  * 再以 Στ²、Σω² 为输入，P_meas - K3 为期望输出，
  * 更新 K1（铜损系数）和 K2（铁损系数）。
  */
-void PowerCtrl::Predict()
+template <uint8_t kMotorCount>
+void PowerCtrl<kMotorCount>::Predict()
 {
     float sumTorque2 = 0.0f;
     float sumOmega2  = 0.0f;
 
-    for (uint8_t i = 0; i < cfg_.motorCount; i++) 
+    for (uint8_t i = 0; i < kMotorCount; i++)
     {
         auto& m = motors_[i];
 
@@ -106,11 +114,10 @@ void PowerCtrl::Predict()
     }
 
     // RLS 在线更新 — 减掉已知的 K3，RLS 只管 K1·τ² + K2·ω²
-    if (rlsInited_) 
+    if (rlsInited_)
     {
         float x[2] = { sumTorque2, sumOmega2 };
-        float y[1] = { measuredPower_ - cfg_.k3 };
-        rls_.Update(x, y);
+        rls_.Update(x, measuredPower_ - cfg_.k3);
         k1_ = rls_.GetWeights()[0];
         k2_ = rls_.GetWeights()[1];
     }
@@ -123,14 +130,13 @@ void PowerCtrl::Predict()
  * 超限时逐电机解二次方程求受限转矩。
  * @param totalBudget 该组总功率预算 (W)
  */
-void PowerCtrl::Allocate(float totalBudget)
+template <uint8_t kMotorCount>
+void PowerCtrl<kMotorCount>::Allocate(float totalBudget)
 {
-    if (cfg_.motorCount == 0) return;
-
     float sumAbsErr   = 0.0f;
     float sumPowerAbs = 0.0f;
 
-    for (uint8_t i = 0; i < cfg_.motorCount; i++) {
+    for (uint8_t i = 0; i < kMotorCount; i++) {
         sumAbsErr   += fabsf(motors_[i].pidErr);
         sumPowerAbs += fabsf(motors_[i].powerPred);
     }
@@ -147,7 +153,8 @@ void PowerCtrl::Allocate(float totalBudget)
     }
 
     // 隶属度 + 功率上限
-    for (uint8_t i = 0; i < cfg_.motorCount; i++) {
+    for (uint8_t i = 0; i < kMotorCount; i++)
+    {
         float ratioErr   = (sumAbsErr   > 0.0f) ? fabsf(motors_[i].pidErr)     / sumAbsErr   : 0.0f;
         float ratioPower = (sumPowerAbs > 0.0f) ? fabsf(motors_[i].powerPred)  / sumPowerAbs : 0.0f;
 
@@ -164,14 +171,14 @@ void PowerCtrl::Allocate(float totalBudget)
 
     if (totalPred <= totalBudget) {
         // 未超限：透传 PID 目标电流
-        for (uint8_t i = 0; i < cfg_.motorCount; i++) {
+        for (uint8_t i = 0; i < kMotorCount; i++) {
             motors_[i].currentOut = motors_[i].targetCurrent;
         }
         return;
     }
 
     // 超限：逐电机解方程，限制 PID 目标
-    for (uint8_t i = 0; i < cfg_.motorCount; i++) 
+    for (uint8_t i = 0; i < kMotorCount; i++)
     {
         const auto& m = motors_[i];
 
@@ -194,19 +201,21 @@ void PowerCtrl::Allocate(float totalBudget)
  * @param idx  电机索引
  * @return 限幅后的电流值，越界返回 0
  */
-float PowerCtrl::GetLimitedCurrent(uint8_t idx) const
+template <uint8_t kMotorCount>
+float PowerCtrl<kMotorCount>::GetLimitedCurrent(uint8_t idx) const
 {
-    return (idx < cfg_.motorCount) ? motors_[idx].currentOut : 0.0f;
+    return (idx < kMotorCount) ? motors_[idx].currentOut : 0.0f;
 }
 
 /**
  * @brief 所有电机总预测功率
  * @return 总功率 (W)
  */
-float PowerCtrl::GetTotalPower() const
+template <uint8_t kMotorCount>
+float PowerCtrl<kMotorCount>::GetTotalPower() const
 {
     float sum = 0.0f;
-    for (uint8_t i = 0; i < cfg_.motorCount; i++) {
+    for (uint8_t i = 0; i < kMotorCount; i++) {
         sum += motors_[i].powerPred;
     }
     return sum;
@@ -220,7 +229,8 @@ float PowerCtrl::GetTotalPower() const
  * @param positive  目标转矩方向
  * @return 受限转矩
  */
-float PowerCtrl::SolveTorque(float a, float b, float c, bool positive)
+template <uint8_t kMotorCount>
+float PowerCtrl<kMotorCount>::SolveTorque(float a, float b, float c, bool positive)
 {
     if (a == 0.0f) {
         // 退化成一元一次（不应发生，但防御）
