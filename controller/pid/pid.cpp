@@ -8,12 +8,11 @@
  * @copyright Copyright (c) 2026
  *
  */
+#pragma message "Compiling Algorithm/Controller/Pid"
 
 #include "pid.hpp"
 #include <math.h>
 #include <algorithm>
-
-#pragma message "Compiling Algorithm/Controller/Pid"
 
 namespace alg::pid {
 

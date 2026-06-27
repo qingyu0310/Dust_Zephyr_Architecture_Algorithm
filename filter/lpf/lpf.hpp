@@ -14,6 +14,8 @@
 
 #pragma once
 
+#pragma message "Compiling Algorithm/Filter/Lpf"
+
 namespace alg::filter {
 
 /**

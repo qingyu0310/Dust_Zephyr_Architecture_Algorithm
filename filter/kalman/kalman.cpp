@@ -8,13 +8,12 @@
  * @copyright Copyright (c) 2026
  * 
  */
+#pragma message "Compiling Algorithm/Filter/Kalman"
 
 #include "kalman.hpp"
 
 #include <math.h>
 #include <string.h>
-
-#pragma message "Compiling Algorithm/Filter/Kalman"
 
 namespace alg::filter {
 

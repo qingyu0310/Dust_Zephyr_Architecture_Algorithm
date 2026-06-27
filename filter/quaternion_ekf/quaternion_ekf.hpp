@@ -12,7 +12,6 @@
 #pragma once
 
 #include "kalman.hpp"
-
 #include <stdint.h>
 
 struct Sample;

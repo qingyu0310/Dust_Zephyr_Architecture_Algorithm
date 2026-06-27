@@ -28,7 +28,6 @@ if(CONFIG_FLT_QUATERNION_EKF)
 endif()
 
 if(CONFIG_ID_RLS)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/rls/rls.cpp)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/rls)
 endif()
 
@@ -38,7 +37,6 @@ if(CONFIG_CTL_PID)
 endif()
 
 if(CONFIG_MOD_CTL_POWER)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/power_ctrl/power_ctrl.cpp)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/power_ctrl)
 endif()
 

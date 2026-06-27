@@ -61,6 +61,8 @@
  */
 #pragma once
 
+#pragma message "Compiling Algorithm/Controller/Timer"
+
 #include <stdint.h>
 
 class Timer final

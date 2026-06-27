@@ -8,14 +8,13 @@
  * @copyright Copyright (c) 2026
  * 
  */
+#pragma message "Compiling Algorithm/Filter/QuaternionEkf"
 
 #include "quaternion_ekf.hpp"
 #include "imu.hpp"
 
 #include <math.h>
 #include <string.h>
-
-#pragma message "Compiling Algorithm/Filter/QuaternionEkf"
 
 namespace {
 
