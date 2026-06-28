@@ -44,18 +44,20 @@ config FLT_KALMAN
         模板化通用线性 Kalman 滤波器，固定尺寸编译期优化。
 
 config FLT_KALMAN_EKF
-    bool "Kalman filter EKF base"
+    bool "ExtendedKalman template"
     default n
     select MATH_EIGEN
     help
-        通用 EKF 基类（KalmanFilter），支持 Hook 扩展和运行时配置。
+        模板化扩展卡尔曼滤波器（EKF），使用 SystemFunc/ObserveFunc
+        回调替代 Hook 模式，固定尺寸编译期优化。
 
-config FLT_QUATERNION_EKF
-    bool "Quaternion EKF"
+config FLT_QUATERNION
+    bool "Quaternion attitude EKF"
     default n
     select FLT_KALMAN_EKF
     help
-        Quaternion attitude EKF built on the generic Kalman filter core.
+        基于四元数的 IMU 姿态解算 EKF。
+        内部使用 ExtendedKalman<6, 3, 3> 作为滤波引擎。
 
 config ID_RLS
     bool "递归最小二乘法"

@@ -15,21 +15,19 @@ if(CONFIG_FLT_HPF)
 endif()
 
 if(CONFIG_FLT_KALMAN)
-	target_include_directories(app PRIVATE
-		${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman
-		${CMAKE_CURRENT_SOURCE_DIR}/math/eigen
-	)
-endif()
-
-if(CONFIG_FLT_KALMAN_EKF)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman/kalman_ekf.cpp)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman/kalman_check.cpp)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman)
 endif()
 
-if(CONFIG_FLT_QUATERNION_EKF)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/quaternion_ekf/quaternion_ekf.cpp)
+if(CONFIG_FLT_KALMAN_EKF)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman/kalman_check.cpp)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman)
+endif()
+
+if(CONFIG_FLT_QUATERNION)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/quaternion/quaternion.cpp)
 	target_include_directories(app PRIVATE
-		${CMAKE_CURRENT_SOURCE_DIR}/filter/quaternion_ekf
+		${CMAKE_CURRENT_SOURCE_DIR}/filter/quaternion
 		${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman
 	)
 endif()

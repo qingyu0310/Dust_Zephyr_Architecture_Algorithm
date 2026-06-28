@@ -52,28 +52,83 @@
 
 namespace alg::filter {
 
+/**
+ * @brief 通用线性 Kalman 滤波器模板
+ *
+ * 支持多变量系统的状态估计:
+ *   - 预测: x⁻ = A·x + B·u      P⁻ = A·P·Aᵀ + Q
+ *   - 更新: K = P⁻·Hᵀ·(H·P⁻·Hᵀ + R)⁻¹
+ *           x = x⁻ + K·(z - H·x⁻)
+ *           P = (I - K·H)·P⁻
+ *
+ * @tparam nx  状态维数
+ * @tparam nz  观测维数
+ * @tparam nu  控制输入维数（默认 0 = 无控制输入）
+ */
 template <uint8_t nx, uint8_t nz, uint8_t nu = 0>
 class Kalman
 {
 public:
+    // 类型别名
     using State   = Eigen::Matrix<float, nx, 1>;    // n×1  后验状态 x
     using Cov     = Eigen::Matrix<float, nx, nx>;   // n×n  协方差矩阵 P
     using Obs     = Eigen::Matrix<float, nz, 1>;    // m×1  观测值 z
-    using ObsCov  = Eigen::Matrix<float, nz, nz>;   // m×m  观测噪声 R
+    using ObsCov  = Eigen::Matrix<float, nz, nz>;   // m×m  观测噪声协方差 R
     using Ctrl    = Eigen::Matrix<float, nu, 1>;    // p×1  控制输入 u
     using CtrlMat = Eigen::Matrix<float, nx, nu>;   // n×p  控制矩阵 B
     using ObsMat  = Eigen::Matrix<float, nz, nx>;   // m×n  观测矩阵 H
     using Gain    = Eigen::Matrix<float, nx, nz>;   // n×m  卡尔曼增益 K
 
+    /**
+     * @brief 设置观测值 z
+     * @param z  观测向量
+     */
     inline void SetZ(const Obs& z)        {  z_ = z;  }
+
+    /**
+     * @brief 设置控制输入 u
+     * @param u  控制向量
+     */
     inline void SetU(const Ctrl& u)       {  u_ = u;  }
+
+    /**
+     * @brief 设置后验状态（硬设定，不经过滤波）
+     * @param x0  状态初值
+     */
     inline void SetState(const State& x0) {  x_ = x0;  x_minus_ = x0; }
+
+    /**
+     * @brief 重置滤波器
+     * - 状态归零
+     * - 协方差恢复为单位阵
+     */
     inline void Reset() {  x_.setZero();  x_minus_.setZero();  P_ = Cov::Identity();  P_minus_ = P_;  }
 
+    /**
+     * @brief 获取后验状态 x
+     */
     inline const State& GetX() const { return x_; }
+
+    /**
+     * @brief 获取后验协方差 P
+     */
     inline const Cov&   GetP() const { return P_; }
+
+    /**
+     * @brief 获取卡尔曼增益 K
+     */
     inline const Gain&  GetK() const { return K_; }
 
+    /**
+     * @brief 初始化滤波器参数
+     * @param A            状态转移矩阵  n×n
+     * @param H            观测矩阵      m×n
+     * @param Q            过程噪声协方差  n×n
+     * @param R            观测噪声协方差  m×m
+     * @param P0           初始协方差     n×n（默认 Identity）
+     * @param P_min_diag   协方差对角线最小值（默认 0，不钳制）
+     * @param B            控制矩阵      n×p
+     */
     void Init(const Cov&     A,
               const ObsMat&  H  = ObsMat::Zero(),
               const Cov&     Q  = Cov   ::Zero(),
@@ -101,6 +156,11 @@ public:
         S_.setZero();
     }
 
+    /**
+     * @brief 预测步：x⁻ = A·x + B·u,  P⁻ = A·P·Aᵀ + Q
+     *
+     * 使用内部已存的 u_ 作为控制输入。nu == 0 时跳过控制项。
+     */
     void Predict()
     {
         x_minus_.noalias() = A_ * x_;
@@ -112,12 +172,22 @@ public:
         MakeSymmetric(P_minus_);
     }
 
+    /**
+     * @brief 预测步（同时设置控制输入）
+     * @param u  控制输入
+     */
     void Predict(const Ctrl& u)
     {
         u_ = u;
         Predict();
     }
 
+    /**
+     * @brief 更新步：K = P⁻·Hᵀ·(S)⁻¹,  x = x⁻ + K·(z - H·x⁻),  P = (I - K·H)·P⁻
+     *
+     * 使用 LDLᵀ 分解求解 S = H·P⁻·Hᵀ + R，数值稳定性优于直接求逆。
+     * 更新后自动执行协方差钳制（若 Init 时设置了 P_min_diag）。
+     */
     void Update()
     {
         // 创新协方差 S = H * P_minus * H^T + R
@@ -142,6 +212,10 @@ public:
         ClampCovariance();
     }
 
+    /**
+     * @brief 更新步（同时设置观测值）
+     * @param z  观测向量
+     */
     void Update(const Obs& z)
     {
         z_ = z;
@@ -149,35 +223,45 @@ public:
     }
 
 private:
-    Cov     A_;         // 状态转移  x_minus = A_ * x_
-    Cov     AT_;        // A_^T
-    CtrlMat B_;         // 控制输入  n×p
-    Cov     Q_;         // 过程噪声
-    ObsCov  R_;         // 观测噪声
-    ObsMat  H_;         // 观测矩阵
-    Eigen::Matrix<float, nx, nz> HT_;   // H_^T
+    Cov     A_;         // 状态转移矩阵  n×n
+    Cov     AT_;        // A_ 转置
+    CtrlMat B_;         // 控制矩阵     n×p
+    Cov     Q_;         // 过程噪声协方差  n×n
+    ObsCov  R_;         // 观测噪声协方差  m×m
+    ObsMat  H_;         // 观测矩阵     m×n
+    Eigen::Matrix<float, nx, nz> HT_;   // H_ 转置
 
-    Obs     z_;         // 实际观测
-    Ctrl    u_;         // 控制输入
+    Obs     z_;         // 当前观测值   m×1
+    Ctrl    u_;         // 当前控制输入  p×1
 
-    Obs     h_;         // 预测观测  h_ = H_ * x_minus_
+    Obs     h_;         // 预测观测值   h_ = H_ * x_minus_
 
-    State   x_;         // 后验状态
-    State   x_minus_;   // 先验状态
-    Cov     P_;         // 后验协方差
-    Cov     P_minus_;   // 先验协方差
-    Gain    K_;         // 卡尔曼增益
+    State   x_;         // 后验状态     n×1
+    State   x_minus_;   // 先验状态     n×1
+    Cov     P_;         // 后验协方差   n×n
+    Cov     P_minus_;   // 先验协方差   n×n
+    Gain    K_;         // 卡尔曼增益   n×m
 
-    ObsCov  S_;         // 创新协方差  H_ * P_minus_ * H_^T + R_
+    ObsCov  S_;         // 创新协方差   S = H·P⁻·Hᵀ + R
 
-    State P_min_diag_;
+    State P_min_diag_;  // 协方差对角线最小值（零向量时不钳制）
 
+    /**
+     * @brief 强制矩阵对称
+     * @param M  原地用上三角填充下三角
+     */
     template<typename Mat>
     static inline void MakeSymmetric(Mat& M)
     {
         M.template triangularView<Eigen::Upper>() = M.transpose();
     }
 
+    /**
+     * @brief 钳制协方差对角线最小值
+     *
+     * 防止协方差对角线元素因数值误差变为负值导致发散。
+     * 仅当 P_min_diag_ 非零时有效（全零时不执行钳制）。
+     */
     void ClampCovariance()
     {
         P_.diagonal() = P_.diagonal().cwiseMax(P_min_diag_);
