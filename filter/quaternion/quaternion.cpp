@@ -263,7 +263,7 @@ void QuaternionEkf::Update(const Sample& sample)
             state_.a_norm < config_.a_ref + config_.a_tol;
     }
 
-    // EKF 预测 + 渐消
+    // EKF 预测 + 渐消 + 校正
     ekf_.Predict();
 
     // 渐消因子：膨胀零偏协方差
@@ -273,7 +273,6 @@ void QuaternionEkf::Update(const Sample& sample)
         P(5,5) = std::min(P(5,5) / state_.lambda, config_.Pb_limit);
     }
 
-    // EKF 校正
     ekf_.SetGainScale(state_.k_scale);
     ekf_.Update();
     state_.chi2 = ekf_.GetChi2();

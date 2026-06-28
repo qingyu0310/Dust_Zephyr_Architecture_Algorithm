@@ -1,13 +1,14 @@
-if(CONFIG_MATH_EIGEN)
-	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/math/eigen)
+if(CONFIG_CTL_EXECTIMER)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/timer)
+endif()
+
+if(CONFIG_CTL_PID)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/pid/pid.cpp)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/pid)
 endif()
 
 if(CONFIG_CTL_TIMER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/timer)
-endif()
-
-if(CONFIG_FLT_LPF)
-	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/lpf)
 endif()
 
 if(CONFIG_FLT_HPF)
@@ -24,6 +25,10 @@ if(CONFIG_FLT_KALMAN_EKF)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman)
 endif()
 
+if(CONFIG_FLT_LPF)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/lpf)
+endif()
+
 if(CONFIG_FLT_QUATERNION)
 	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/quaternion/quaternion.cpp)
 	target_include_directories(app PRIVATE
@@ -36,9 +41,8 @@ if(CONFIG_ID_RLS)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/rls)
 endif()
 
-if(CONFIG_CTL_PID)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/pid/pid.cpp)
-	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/pid)
+if(CONFIG_MATH_EIGEN)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/math/eigen)
 endif()
 
 if(CONFIG_MOD_CTL_POWER)

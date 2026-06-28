@@ -18,6 +18,12 @@ config CTL_TIMER
     help
         软件定时器
 
+config CTL_EXECTIMER
+    bool "ExecTimer"
+    default n
+    help
+        代码段执行时间测量工具，支持多节点分段计时。
+
 config CTL_PID
     bool "PID控制器"
     default n
