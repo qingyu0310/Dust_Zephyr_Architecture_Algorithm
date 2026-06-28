@@ -1,219 +1,187 @@
 /**
  * @file kalman.hpp
  * @author qingyu
- * @brief 
+ * @brief 模板化通用线性 Kalman 滤波器
  * @version 0.1
- * @date 2026-06-01
- * 
- * @copyright Copyright (c) 2026
- * 
+ * @date 2026-06-28
+ *
+ * @par 使用示例（弹簧阻尼系统）
+ * @code
+ *   //   x[0] = pos          位置
+ *   //   x[1] = vel          速度
+ *   //   z[0] = pos_meas     位置测量
+ *   //
+ *   //   A = [1       dt    ]
+ *   //       [-k·dt  1-c·dt ]
+ *   //
+ *   //   H = [1  0]
+ *
+ *   constexpr float k  = 10.0f;
+ *   constexpr float c  = 0.5f;
+ *   constexpr float dt = 0.01f;
+ *
+ *   Eigen::Matrix2f A;
+ *   A << 1.0f, dt, -k * dt, 1.0f - c * dt;
+ *
+ *   Eigen::RowVector2f H;
+ *   H << 1.0f, 0.0f;
+ *
+ *   Kalman<2, 1> kf;
+ *   kf.Init(A, H,
+ *           Eigen::Matrix2f::Identity() * 0.01f,
+ *           Eigen::Matrix<float, 1, 1>::Identity() * 0.1f);
+ *
+ *   // 每控制周期
+ *   Eigen::Matrix<float, 1, 1> z;
+ *   z(0) = sensor.Read();
+ *   kf.SetZ(z);                 // 设观测值
+ *   // kf.SetU(u);              // 设控制输入（nu=0 时不需要）
+ *   kf.Predict();
+ *   kf.Update();
+ *
+ *   float pos = kf.GetX()(0);
+ *   float vel = kf.GetX()(1);
+ * @endcode
  */
 
 #pragma once
 
-#include <stdint.h>
+#pragma message "Compiling Algorithm/Filter/Kalman"
+
+#include <Eigen/Dense>
 
 namespace alg::filter {
 
-/**
- * @brief 矩阵运算返回状态。
- *
- * 这里保持非常小的状态集合，是为了让滤波器在裸机/RTOS 环境里也容易处理：
- * - Ok: 运算成功。
- * - SizeMismatch: 行列数不满足矩阵公式。
- * - Singular: 矩阵不可逆，通常说明观测协方差退化或数据异常。
- */
-enum class MatrixStatus : int8_t
-{
-    Ok = 0,
-    SizeMismatch = -1,
-    Singular = -2,
-};
-
-/**
- * @brief 轻量矩阵视图。
- *
- * Matrix 不持有内存，只记录行列数和外部数据指针。这样 KalmanFilter 可以把所有
- * 工作区都放在对象内部的固定数组里，避免运行时动态分配，也方便在 Zephyr 线程里使用。
- */
-struct Matrix
-{
-    uint8_t numRows = 0;
-    uint8_t numCols = 0;
-    float  *pData   = nullptr;
-};
-
-/* 基础矩阵运算。所有矩阵都使用行主序存储。 */
-void         MatrixInit(Matrix *mat, uint8_t rows, uint8_t cols, float *data);
-MatrixStatus MatrixAdd(const Matrix *lhs, const Matrix *rhs, Matrix *out);
-MatrixStatus MatrixSubtract(const Matrix *lhs, const Matrix *rhs, Matrix *out);
-MatrixStatus MatrixMultiply(const Matrix *lhs, const Matrix *rhs, Matrix *out);
-MatrixStatus MatrixTranspose(const Matrix *src, Matrix *dst);
-MatrixStatus MatrixInverse(const Matrix *src, Matrix *dst);
-
-/**
- * @brief 通用线性 Kalman 滤波器。
- *
- * 本类只负责标准 Kalman 五步公式和矩阵缓存管理，不绑定具体传感器。姿态 EKF 这类非线性算法
- * 可以通过 Hook 在每一步之间改写 F/H/Q/R/K 等矩阵，从而复用同一个滤波核心。
- *
- * 状态向量:
- * - xhat: 当前后验估计。
- * - xhatminus: 当前先验预测。
- *
- * 常用矩阵:
- * - F: 状态转移矩阵。
- * - B: 控制输入矩阵，uSize 为 0 时不参与计算。
- * - H: 观测矩阵。
- * - Q/R: 过程噪声和观测噪声。
- * - P/Pminus: 后验/先验协方差。
- * - K: Kalman 增益。
- */
-class KalmanFilter final
+template <uint8_t nx, uint8_t nz, uint8_t nu = 0>
+class Kalman
 {
 public:
-    /* Hook 会在 Update() 的固定步骤间被调用，用于 EKF 线性化、自适应增益等扩展。 */
-    using Hook = void (*)(KalmanFilter *kf);
+    using State   = Eigen::Matrix<float, nx, 1>;    // n×1  后验状态 x
+    using Cov     = Eigen::Matrix<float, nx, nx>;   // n×n  协方差矩阵 P
+    using Obs     = Eigen::Matrix<float, nz, 1>;    // m×1  观测值 z
+    using ObsCov  = Eigen::Matrix<float, nz, nz>;   // m×m  观测噪声 R
+    using Ctrl    = Eigen::Matrix<float, nu, 1>;    // p×1  控制输入 u
+    using CtrlMat = Eigen::Matrix<float, nx, nu>;   // n×p  控制矩阵 B
+    using ObsMat  = Eigen::Matrix<float, nz, nx>;   // m×n  观测矩阵 H
+    using Gain    = Eigen::Matrix<float, nx, nz>;   // n×m  卡尔曼增益 K
 
-    /* 固定上限用于避免堆内存。需要更大维度时优先评估 RAM 占用再扩大这些常量。 */
-    static constexpr uint8_t kMaxStateSize   = 16;
-    static constexpr uint8_t kMaxControlSize = 8;
-    static constexpr uint8_t kMaxMeasureSize = 8;
+    inline void SetZ(const Obs& z)        {  z_ = z;  }
+    inline void SetU(const Ctrl& u)       {  u_ = u;  }
+    inline void SetState(const State& x0) {  x_ = x0;  x_minus_ = x0; }
+    inline void Reset() {  x_.setZero();  x_minus_.setZero();  P_ = Cov::Identity();  P_minus_ = P_;  }
 
-    KalmanFilter();
+    inline const State& GetX() const { return x_; }
+    inline const Cov&   GetP() const { return P_; }
+    inline const Gain&  GetK() const { return K_; }
 
-    bool   Init(uint8_t xhat_size, uint8_t u_size, uint8_t z_size);
-    void   Measure();
-    void   UpdateXhatMinus();
-    void   UpdatePminus();
-    void   SetGain();
-    void   UpdateXhat();
-    void   UpdateCovariance();
-    float *Update();
+    void Init(const Cov&     A,
+              const ObsMat&  H  = ObsMat::Zero(),
+              const Cov&     Q  = Cov   ::Zero(),
+              const ObsCov&  R  = ObsCov::Zero(),
+              const Cov&     P0 = Cov   ::Identity(),
+              const State&   P_min_diag = State::Zero(),
+              const CtrlMat& B  = CtrlMat::Zero())
+    {
+        A_  = A;
+        AT_ = A_.transpose();
+        B_  = B;
+        H_  = H;
+        HT_ = H_.transpose();
+        Q_  = Q;
+        R_  = R;
+        P_  = P0;
+        P_min_diag_ = P_min_diag;
+        z_.setZero();
+        u_.setZero();
+        h_.setZero();
+        x_.setZero();
+        x_minus_.setZero();
+        P_minus_ = P_;
+        K_.setZero();
+        S_.setZero();
+    }
 
-    void  SetUserData(void *user_data) { user_data_ = user_data; }
-    void *UserData() const { return user_data_; }
+    void Predict()
+    {
+        x_minus_.noalias() = A_ * x_;
+        if constexpr (nu > 0) {
+            x_minus_.noalias() += B_ * u_;
+        }
+        P_minus_.noalias() = A_ * P_ * AT_;
+        P_minus_ += Q_;
+        MakeSymmetric(P_minus_);
+    }
 
-    /* 对外暴露这些指针是为了兼容旧工程的调参/Hook 写法，实际内存仍由对象内部数组持有。 */
-    float   *FilteredValue         = nullptr;
-    float   *MeasuredVector        = nullptr;
-    float   *ControlVector         = nullptr;
-    uint8_t  xhatSize              = 0;
-    uint8_t  uSize                 = 0;
-    uint8_t  zSize                 = 0;
-    bool     UseAutoAdjustment     = false;
-    uint8_t  MeasurementValidNum   = 0;
-    uint8_t *MeasurementMap        = nullptr;
-    float   *MeasurementDegree     = nullptr;
-    float   *MatR_DiagonalElements = nullptr;
-    float   *StateMinVariance      = nullptr;
+    void Predict(const Ctrl& u)
+    {
+        u_ = u;
+        Predict();
+    }
 
-    /*
-     * 跳过标志对应标准 Kalman 公式的几个步骤。
-     * EKF 在某些阶段会自己实现部分公式，因此保留这些开关。
-     */
-    bool SkipEq1 = false;
-    bool SkipEq2 = false;
-    bool SkipEq3 = false;
-    bool SkipEq4 = false;
-    bool SkipEq5 = false;
+    void Update()
+    {
+        // 创新协方差 S = H * P_minus * H^T + R
+        S_.noalias() = H_ * P_minus_ * HT_;
+        S_ += R_;
+        MakeSymmetric(S_);
 
-    /* 矩阵视图区。上层可直接填 F/H/Q/R/P 等矩阵数据。 */
-    Matrix xhat {};
-    Matrix xhatminus {};
-    Matrix u {};
-    Matrix z {};
-    Matrix P {};
-    Matrix Pminus {};
-    Matrix F {};
-    Matrix FT {};
-    Matrix B {};
-    Matrix H {};
-    Matrix HT {};
-    Matrix Q {};
-    Matrix R {};
-    Matrix K {};
-    Matrix S {};
-    Matrix temp_matrix {};
-    Matrix temp_matrix1 {};
-    Matrix temp_vector {};
-    Matrix temp_vector1 {};
+        // 卡尔曼增益 K = P_minus * H^T * S^-1
+        auto solver = S_.ldlt();
+        if (solver.info() != Eigen::Success) return;
+        K_.noalias() = P_minus_ * HT_;
+        K_ = solver.solve(K_.transpose()).transpose();
 
-    MatrixStatus MatStatus = MatrixStatus::Ok;
+        // 状态修正 x = x_minus + K * (z - H * x_minus)
+        h_.noalias() = H_ * x_minus_;
+        x_ = x_minus_ + K_ * (z_ - h_);
 
-    /* Update() 各阶段的扩展点，按编号依次执行。 */
-    Hook User_Func0_f = nullptr;
-    Hook User_Func1_f = nullptr;
-    Hook User_Func2_f = nullptr;
-    Hook User_Func3_f = nullptr;
-    Hook User_Func4_f = nullptr;
-    Hook User_Func5_f = nullptr;
-    Hook User_Func6_f = nullptr;
+        // 协方差修正 P = (I - K*H) * Pminus
+        P_.noalias() = P_minus_ - K_ * H_ * P_minus_;
+        MakeSymmetric(P_);
 
-    float *xhat_data         = nullptr;
-    float *xhatminus_data    = nullptr;
-    float *u_data            = nullptr;
-    float *z_data            = nullptr;
-    float *P_data            = nullptr;
-    float *Pminus_data       = nullptr;
-    float *F_data            = nullptr;
-    float *FT_data           = nullptr;
-    float *B_data            = nullptr;
-    float *H_data            = nullptr;
-    float *HT_data           = nullptr;
-    float *Q_data            = nullptr;
-    float *R_data            = nullptr;
-    float *K_data            = nullptr;
-    float *S_data            = nullptr;
-    float *temp_matrix_data  = nullptr;
-    float *temp_matrix_data1 = nullptr;
-    float *temp_vector_data  = nullptr;
-    float *temp_vector_data1 = nullptr;
+        ClampCovariance();
+    }
+
+    void Update(const Obs& z)
+    {
+        z_ = z;
+        Update();
+    }
 
 private:
-    static constexpr uint16_t kMaxStateSquare   = kMaxStateSize * kMaxStateSize;
-    static constexpr uint16_t kMaxStateControl  = kMaxStateSize * kMaxControlSize;
-    static constexpr uint16_t kMaxStateMeasure  = kMaxStateSize * kMaxMeasureSize;
-    static constexpr uint16_t kMaxMeasureState  = kMaxMeasureSize * kMaxStateSize;
-    static constexpr uint16_t kMaxMeasureSquare = kMaxMeasureSize * kMaxMeasureSize;
-    static constexpr uint8_t  kMaxVectorSize    = kMaxStateSize;
+    Cov     A_;         // 状态转移  x_minus = A_ * x_
+    Cov     AT_;        // A_^T
+    CtrlMat B_;         // 控制输入  n×p
+    Cov     Q_;         // 过程噪声
+    ObsCov  R_;         // 观测噪声
+    ObsMat  H_;         // 观测矩阵
+    Eigen::Matrix<float, nx, nz> HT_;   // H_^T
 
-    void BindStorage();
-    void ResetStorage();
-    void ResetMatrices();
-    void AdjustMeasurementMatrices();
+    Obs     z_;         // 实际观测
+    Ctrl    u_;         // 控制输入
 
-    void *user_data_ = nullptr;
+    Obs     h_;         // 预测观测  h_ = H_ * x_minus_
 
-    uint8_t measurement_map_storage_[kMaxMeasureSize] {};
-    float   measurement_degree_storage_[kMaxMeasureSize] {};
-    float   mat_r_diagonal_storage_[kMaxMeasureSize] {};
-    float   state_min_variance_storage_[kMaxStateSize] {};
-    uint8_t temp_index_storage_[kMaxMeasureSize] {};
+    State   x_;         // 后验状态
+    State   x_minus_;   // 先验状态
+    Cov     P_;         // 后验协方差
+    Cov     P_minus_;   // 先验协方差
+    Gain    K_;         // 卡尔曼增益
 
-    float filtered_value_storage_[kMaxStateSize] {};
-    float measured_vector_storage_[kMaxMeasureSize] {};
-    float control_vector_storage_[kMaxControlSize] {};
+    ObsCov  S_;         // 创新协方差  H_ * P_minus_ * H_^T + R_
 
-    float xhat_data_storage_[kMaxStateSize] {};
-    float xhatminus_data_storage_[kMaxStateSize] {};
-    float u_data_storage_[kMaxControlSize] {};
-    float z_data_storage_[kMaxMeasureSize] {};
-    float p_data_storage_[kMaxStateSquare] {};
-    float pminus_data_storage_[kMaxStateSquare] {};
-    float f_data_storage_[kMaxStateSquare] {};
-    float ft_data_storage_[kMaxStateSquare] {};
-    float b_data_storage_[kMaxStateControl] {};
-    float h_data_storage_[kMaxMeasureState] {};
-    float ht_data_storage_[kMaxStateMeasure] {};
-    float q_data_storage_[kMaxStateSquare] {};
-    float r_data_storage_[kMaxMeasureSquare] {};
-    float k_data_storage_[kMaxStateMeasure] {};
-    float s_data_storage_[kMaxStateSquare] {};
-    float temp_matrix_data_storage_[kMaxStateSquare] {};
-    float temp_matrix1_data_storage_[kMaxStateSquare] {};
-    float temp_vector_data_storage_[kMaxVectorSize] {};
-    float temp_vector1_data_storage_[kMaxVectorSize] {};
+    State P_min_diag_;
+
+    template<typename Mat>
+    static inline void MakeSymmetric(Mat& M)
+    {
+        M.template triangularView<Eigen::Upper>() = M.transpose();
+    }
+
+    void ClampCovariance()
+    {
+        P_.diagonal() = P_.diagonal().cwiseMax(P_min_diag_);
+    }
 };
 
 } // namespace alg::filter

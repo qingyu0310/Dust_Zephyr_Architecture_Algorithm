@@ -89,8 +89,8 @@ public:
     void Init(const Config& cfg)
     {
         cfg_ = cfg;
-        k1_ = cfg.k1Init;
-        k2_ = cfg.k2Init;
+        k1_  = cfg.k1Init;
+        k2_  = cfg.k2Init;
         rlsInited_ = cfg.rlsEnable;
 
         if (rlsInited_) {

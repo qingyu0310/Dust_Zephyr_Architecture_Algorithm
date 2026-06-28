@@ -39,13 +39,21 @@ config FLT_HPF
 config FLT_KALMAN
     bool "Kalman filter"
     default n
+    select MATH_EIGEN
     help
-        Generic matrix-based Kalman filter core.
+        模板化通用线性 Kalman 滤波器，固定尺寸编译期优化。
+
+config FLT_KALMAN_EKF
+    bool "Kalman filter EKF base"
+    default n
+    select MATH_EIGEN
+    help
+        通用 EKF 基类（KalmanFilter），支持 Hook 扩展和运行时配置。
 
 config FLT_QUATERNION_EKF
     bool "Quaternion EKF"
     default n
-    select FLT_KALMAN
+    select FLT_KALMAN_EKF
     help
         Quaternion attitude EKF built on the generic Kalman filter core.
 

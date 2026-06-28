@@ -15,7 +15,14 @@ if(CONFIG_FLT_HPF)
 endif()
 
 if(CONFIG_FLT_KALMAN)
-	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman/kalman.cpp)
+	target_include_directories(app PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman
+		${CMAKE_CURRENT_SOURCE_DIR}/math/eigen
+	)
+endif()
+
+if(CONFIG_FLT_KALMAN_EKF)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman/kalman_ekf.cpp)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/filter/kalman)
 endif()
 
