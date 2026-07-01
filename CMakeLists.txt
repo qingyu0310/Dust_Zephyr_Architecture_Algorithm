@@ -49,4 +49,12 @@ if(CONFIG_MOD_CTL_POWER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/power_ctrl)
 endif()
 
+if(CONFIG_BUF_RINGBUF)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/ringbuf)
+endif()
+
+if(CONFIG_BUF_BIPBUF)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/bipbuf)
+endif()
+
 add_subdirectory(tflm)
