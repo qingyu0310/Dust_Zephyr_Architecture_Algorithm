@@ -248,14 +248,14 @@ private:
         return nullptr;
     }
 
-    alignas(64) uint8_t buffer_[Capacity] = {};
+    alignas(64) uint8_t buffer_[Capacity] {};
 
-    uint8_t* region_a_start_ = nullptr;  // A 区起始
-    uint32_t region_a_size_ = 0;         // A 区大小
+    uint8_t* region_a_start_ = nullptr;     // A 区起始
+    uint32_t region_a_size_  = 0;           // A 区大小
 
-    uint32_t region_b_size_ = 0;         // B 区大小（起始始终为 buffer_[0]）
+    uint32_t region_b_size_  = 0;           // B 区大小（起始始终为 buffer_[0]）
 
-    uint8_t* reserved_start_ = nullptr;  // 预留区起始
-    uint32_t reserved_size_ = 0;         // 预留区大小
-    bool reserved_is_b_ = false;         // 预留区将提交为 B 区还是 A 区
+    uint8_t* reserved_start_ = nullptr;     // 预留区起始
+    uint32_t reserved_size_  = 0;           // 预留区大小
+    bool reserved_is_b_      = false;       // 预留区将提交为 B 区还是 A 区
 };

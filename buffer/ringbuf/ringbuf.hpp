@@ -132,7 +132,7 @@ public:
     }
 
 private:
-    uint8_t  buf_[Capacity] = {};
+    alignas(64) uint8_t buf_[Capacity] = {};
     uint32_t head_ = 0;    // 写位置
     uint32_t tail_ = 0;    // 读位置
 };
