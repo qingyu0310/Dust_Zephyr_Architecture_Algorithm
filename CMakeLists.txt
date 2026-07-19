@@ -1,3 +1,11 @@
+if(CONFIG_BUF_BIPBUF)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/bipbuf)
+endif()
+
+if(CONFIG_BUF_RINGBUF)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/ringbuf)
+endif()
+
 if(CONFIG_CTL_EXECTIMER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/timer)
 endif()
@@ -41,20 +49,16 @@ if(CONFIG_ID_RLS)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/rls)
 endif()
 
+if(CONFIG_ID_STABILITY)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify)
+endif()
+
 if(CONFIG_MATH_EIGEN)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/math/eigen)
 endif()
 
 if(CONFIG_MOD_CTL_POWER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/power_ctrl)
-endif()
-
-if(CONFIG_BUF_RINGBUF)
-	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/ringbuf)
-endif()
-
-if(CONFIG_BUF_BIPBUF)
-	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/buffer/bipbuf)
 endif()
 
 add_subdirectory(tflm)
