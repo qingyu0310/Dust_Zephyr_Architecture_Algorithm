@@ -76,6 +76,14 @@ config ID_RLS
     help
         递归最小二乘法
 
+config ID_MOTOR_PLANT
+    bool "电机本体辨识"
+    default n
+    select ID_RLS
+    help
+        基于 RLS 的电机本体辨识（torque→omega）。
+        输出离散模型 a/b/c 和连续域 K/τ/delay。
+
 config ID_STABILITY
     bool "稳定判据与波形发生器"
     default n

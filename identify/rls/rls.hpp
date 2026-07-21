@@ -77,11 +77,23 @@ public:
      *      ④ x_k += K_k · e_k              参数更新
      *      ⑤ P_k  = (P - K·α·P) / λ        协方差更新
      */
-    void Update(const float (&alpha)[n], float beta)
+    /**
+     * @brief 执行一次 RLS 迭代
+     * @param alpha           输入行向量 α_k，长度 n
+     * @param beta            期望输出标量 β_k
+     * @param lambda_override  可选：覆盖内部 lambda_，-1 表示使用默认值
+     *
+     * @note lambda_override 用于异步帧场景：每帧传入 exp(-Δt / T_forget)
+     *       约束: 0 < lambda ≤ 1，否则协方差更新可能发散
+     */
+    void Update(const float (&alpha)[n], float beta, float lambda_override = -1.0f)
     {
         // 拷贝输入
         memcpy(alpha_k, alpha, n * sizeof(float));
         beta_k = beta;
+
+        // 确定本次使用的 lambda
+        float lambda = (lambda_override > 0.0f) ? lambda_override : lambda_;
 
         // Eigen::Map 包装内部 float 数组，零拷贝
         Eigen::Map<Eigen::VectorXf>            x(x_k, n);       // n×1 待估参数
@@ -96,7 +108,7 @@ public:
 
         // 增益: K = P . alpha_kT / (lambda + alpha_k . P . alpha_kT)
         Eigen::VectorXf K = P * a.transpose();
-        float denom = lambda_ + a.dot(K);
+        float denom = lambda + a.dot(K);
         if (denom < 1e-12f) denom = 1e-12f;
         K /= denom;
 
@@ -104,7 +116,7 @@ public:
         x += K * e_k;
 
         // 协方差更新 P = (P - K . alpha . P) / lambda
-        P = (P - K * a * P) / lambda_;
+        P = (P - K * a * P) / lambda;
         P = P.selfadjointView<Eigen::Lower>();
     }
 
@@ -112,6 +124,24 @@ public:
     void  SetWeights( const float (&w)[n] ) { memcpy(x_k, w, n * sizeof(float)); }
     float GetOutput() const { return beta_hat_k; }
     float GetError()  const { return e_k; }
+
+    /**
+     * @brief 重置全部状态（权重清零、协方差重新初始化），用于多轮辨识
+     */
+    void Reset(float p_init)
+    {
+        memset(x_k,     0, sizeof(x_k));
+        memset(alpha_k, 0, sizeof(alpha_k));
+        memset(P_k,     0, sizeof(P_k));
+
+        beta_k     = 0.0f;
+        beta_hat_k = 0.0f;
+        e_k        = 0.0f;
+
+        for (uint16_t i = 0; i < n * n; i += n + 1) {
+            P_k[i] = p_init;
+        }
+    }
 
 private:
     const float lambda_ = 0.99999f;

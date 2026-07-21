@@ -49,6 +49,14 @@ if(CONFIG_ID_RLS)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/rls)
 endif()
 
+if(CONFIG_ID_MOTOR_PLANT)
+	target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify/motor/motorplant.cpp)
+	target_include_directories(app PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/identify/motor
+		${CMAKE_CURRENT_SOURCE_DIR}/identify/rls
+	)
+endif()
+
 if(CONFIG_ID_STABILITY)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify)
 endif()
