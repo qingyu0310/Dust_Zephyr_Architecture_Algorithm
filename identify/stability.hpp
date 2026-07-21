@@ -79,6 +79,106 @@ private:
 };
 
 /**
+ * @brief 均值窗口稳定判据 — 误差均值 + 标准差，多轮确认
+ *
+ * 每帧累积误差绝对值（及其平方，用于标准差）和斜率绝对值。
+ * 窗口满后判：误差均值 + 误差标准差 + 最大误差 + 平均斜率 + 最大斜率。
+ * 连续 kRounds 个窗口通过 → 判稳定。
+ *
+ * @tparam kWinSize  一个窗口的帧数
+ * @tparam kRounds   稳定所需连续窗口数
+ */
+template <uint32_t kWinSize, uint32_t kRounds>
+class MeanStable final
+{
+public:
+    constexpr MeanStable() = default;
+
+    /**
+     * @brief 推入一帧并判断是否稳定
+     *
+     * 斜率分母为窗口内实际有效斜率数（kWinSize - 1）。
+     *
+     * @param target         目标值
+     * @param measured       当前测量值
+     * @param dt_s           帧间隔 (s)
+     * @param error_limit    允许的最大平均绝对误差
+     * @param var_limit      允许的误差方差上限
+     * @param max_err_limit  允许的单帧最大绝对误差
+     * @param slope_limit    允许的最大平均绝对斜率
+     * @param max_slp_limit  允许的单帧最大绝对斜率
+     * @return true  连续 kRounds 个窗口均合格
+     */
+    bool Check(float target, float measured, float dt_s,
+               float error_limit    = 0.50f,
+               float var_limit      = 0.25f,
+               float max_err_limit  = 1.00f,
+               float slope_limit    = 0.01f,
+               float max_slp_limit  = 0.05f)
+    {
+        const float err = std::abs(measured - target);
+        sum_err_    += err;
+        sum_err_sq_ += err * err;
+        if (err > max_err_) max_err_ = err;
+
+        if (cnt_ > 0 && dt_s > 0.0f) {
+            const float slp = std::abs((measured - prev_) / dt_s);
+            sum_slp_   += slp;
+            slope_cnt_++;
+            if (slp > max_slp_) max_slp_ = slp;
+        }
+        prev_ = measured;
+
+        if (++cnt_ < kWinSize)
+            return false;
+
+        // 窗口满，逐项判
+        const float mean_err = sum_err_ / kWinSize;
+        const float var_err  = (sum_err_sq_ / kWinSize) - (mean_err * mean_err);
+        const bool  pass     = mean_err <= error_limit
+                            && var_err <= var_limit
+                            && max_err_ <= max_err_limit
+                            && (sum_slp_ / slope_cnt_) <= slope_limit
+                            && max_slp_ <= max_slp_limit;
+
+        // 复位
+        sum_err_ = sum_err_sq_ = 0.0f;
+        max_err_ = 0.0f;
+        sum_slp_ = 0.0f;
+        max_slp_ = 0.0f;
+        cnt_ = slope_cnt_ = 0;
+
+        if (!pass) {
+            good_rnd_ = 0;
+            return false;
+        }
+
+        return (++good_rnd_ >= kRounds);
+    }
+
+    void Reset()
+    {
+        sum_err_ = sum_err_sq_ = 0.0f;
+        max_err_ = 0.0f;
+        sum_slp_ = 0.0f;
+        max_slp_ = 0.0f;
+        prev_ = 0.0f;
+        cnt_ = slope_cnt_ = good_rnd_ = 0;
+    }
+
+private:
+    float sum_err_    = 0.0f;       // 窗口内累积 |error|
+    float sum_err_sq_ = 0.0f;       // 窗口内累积 error²（方差用）
+    float max_err_    = 0.0f;       // 窗口内最大 |error|
+    float sum_slp_    = 0.0f;       // 窗口内累积 |slope|
+    float max_slp_    = 0.0f;       // 窗口内最大 |slope|
+    float prev_       = 0.0f;       // 上一帧测量值（斜率计算用）
+    uint32_t cnt_        = 0;       // 当前窗口帧计数
+    uint32_t slope_cnt_  = 0;       // 实际有效斜率数（N 帧 = N-1 个）
+    uint32_t good_rnd_   = 0;       // 连续合格窗口数
+};
+
+/**
  * @brief 方波发生器：±amp
  */
 class SquareGen final
