@@ -76,13 +76,24 @@
 #include <cassert>
 
 template <uint32_t Capacity>
+/**
+ * @brief 双区环形缓冲 — 保证连续内存访问，零拷贝 DMA 友好
+ *
+ * 写入回绕时在头部创建 B 区，读取完 A 后 B 自动提升为 A。
+ * 数据永远不会被分段，适合 DMA 直接写入的流式数据接收。
+ *
+ * @tparam Capacity 缓冲总大小（字节）
+ */
 class BipBuffer
 {
 public:
     BipBuffer() = default;
 
-    // Reserve 一块连续空间用于写入。
-    // 返回指针，失败返回 nullptr。
+    /**
+     * @brief 预留一块连续空间用于写入
+     * @param size 请求的写入长度
+     * @return 写入指针，失败返回 nullptr
+     */
     uint8_t* Reserve(uint32_t size)
     {
         if (reserved_start_ || size == 0 || size > Capacity)
@@ -106,9 +117,7 @@ public:
         }
 
         // 普通模式：先试末尾
-        uint32_t write_pos = region_a_start_
-            ? static_cast<uint32_t>(region_a_start_ - buffer_) + region_a_size_
-            : 0;
+        uint32_t write_pos = region_a_start_ ? static_cast<uint32_t>(region_a_start_ - buffer_) + region_a_size_ : 0;
         uint32_t free_at_end = Capacity - write_pos;
         if (size <= free_at_end) {
             reserved_start_ = buffer_ + write_pos;
@@ -121,8 +130,14 @@ public:
         return reserve_at_head_(size);
     }
 
-    // 强制从头部写入（跳过尾部剩余空间）
-    // 尾部剩一点不够装整个包时有用，避免浪费 CPU 判断尾部空间。
+    /**
+     * @brief 强制从头部写入（跳过尾部剩余空间）
+     *
+     * 尾部剩一点不够装整个包时有用，避免 CPU 判断尾部空间后白跑一次。
+     *
+     * @param size 请求的写入长度
+     * @return 写入指针，失败返回 nullptr
+     */
     uint8_t* ReserveForceWrap(uint32_t size)
     {
         if (reserved_start_ || size == 0 || size > Capacity)
@@ -139,7 +154,11 @@ public:
         return reserve_at_head_(size);
     }
 
-    // 提交之前 Reserve 的空间。
+    /**
+     * @brief 提交之前 Reserve 的空间
+     *
+     * @param size 实际写入的字节数（<= Reserve 请求的大小）
+     */
     void Commit(uint32_t size)
     {
         assert(reserved_start_ != nullptr && "Commit without Reserve");
@@ -167,8 +186,12 @@ public:
         reserved_size_ = 0;
     }
 
-    // 获取第一个连续可读块。
-    // 返回指针并设置 out_size。无数据时返回 nullptr，out_size = 0。
+    /**
+     * @brief 获取第一个连续可读块
+     *
+     * @param[out] out_size 可读数据长度
+     * @return 数据指针，无数据返回 nullptr
+     */
     uint8_t* GetContiguousReadBlock(uint32_t& out_size)
     {
         if (region_a_size_ > 0) {
@@ -183,7 +206,11 @@ public:
         return nullptr;
     }
 
-    // 从可读块头部消费 bytes，释放空间。
+    /**
+     * @brief 从可读块头部消费 bytes，释放空间
+     *
+     * @param size 要消费的字节数
+     */
     void Decommit(uint32_t size)
     {
         while (size > 0)
@@ -229,8 +256,21 @@ public:
         }
     }
 
+    /** @brief 缓冲区总容量 */
     static constexpr uint32_t GetCapacity() { return Capacity; }
+    /** @brief 当前已占用大小 */
     size_t GetUsedSize() const { return region_a_size_ + region_b_size_; }
+
+    /** @brief 丢弃全部数据和未提交预留 */
+    void Reset()
+    {
+        region_a_start_ = nullptr;
+        region_a_size_  = 0;
+        region_b_size_  = 0;
+        reserved_start_ = nullptr;
+        reserved_size_  = 0;
+        reserved_is_b_  = false;
+    }
 
 private:
     // 回绕到头部分配（普通模式下公共逻辑）
@@ -252,9 +292,7 @@ private:
 
     uint8_t* region_a_start_ = nullptr;     // A 区起始
     uint32_t region_a_size_  = 0;           // A 区大小
-
     uint32_t region_b_size_  = 0;           // B 区大小（起始始终为 buffer_[0]）
-
     uint8_t* reserved_start_ = nullptr;     // 预留区起始
     uint32_t reserved_size_  = 0;           // 预留区大小
     bool reserved_is_b_      = false;       // 预留区将提交为 B 区还是 A 区
