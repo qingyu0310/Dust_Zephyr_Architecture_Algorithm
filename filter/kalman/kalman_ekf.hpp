@@ -185,6 +185,7 @@ public:
 
         auto solver = S_.ldlt();
         if (solver.info() != Eigen::Success) return;
+        if (solver.vectorD().minCoeff() <= 0.0f) return;
         K_.noalias() = P_minus_ * HT_;
         K_ = solver.solve(K_.transpose()).transpose();
         if (k_scale_ != 1.0f) K_ *= k_scale_;
@@ -195,8 +196,12 @@ public:
         // 卡方值 χ² = innovᵀ · S⁻¹ · innov
         chi2_ = innov.dot(solver.solve(innov));
 
-        P_.noalias() = P_minus_ - K_ * H_ * P_minus_;
-        MakeSymmetric(P_);
+        // Joseph 形式协方差更新：P = (I-KH)·P⁻·(I-KH)ᵀ + K·R·Kᵀ
+        // 保证 P 半正定，避免大 K 时标准公式的数值对消问题
+        {
+            const auto I_KH = Cov::Identity() - K_ * H_;
+            P_.noalias() = I_KH * P_minus_ * I_KH.transpose() + K_ * R_ * K_.transpose();
+        }
 
         ClampCovariance();
     }
@@ -295,6 +300,11 @@ public:
      * @brief 获取后验协方差 P
      */
     inline const Cov&   GetP() const { return P_; }
+
+    /**
+     * @brief 设置后验协方差 P
+     */
+    inline void SetCovariance(const Cov& P) { P_ = P; }
 
     /**
      * @brief 获取卡尔曼增益 K

@@ -61,7 +61,7 @@ public:
         // 核心调参
         float Qq            = 10.0f;        // 四元数过程噪声，越大越信任陀螺
         float Qb            = 0.001f;       // 零偏过程噪声，越大零偏跟踪越快
-        float R             = 1000000.0f;   // 观测噪声，越大越信任陀螺积分
+        float R             = 1000000.0f;   // 四元数过程噪声，越大越不信任陀螺预测，越依赖观测修正
 
         // 高级调参
         float lambda        = 1.0f;         // 渐消因子（≤1），<1 防零偏协方差收敛死
@@ -93,6 +93,9 @@ public:
 
         uint64_t err_cnt  = 0;              // 连续发散计数
         uint64_t upd_cnt  = 0;              // 更新次数
+        uint16_t yaw_bias_static_cnt = 0;   // 连续静止样本数
+        float   bgz_sum = 0.0f;             // 静止期 gz 累积和（滑动均值用）
+        uint32_t bgz_cnt = 0;               // 静止期 gz 样本计数
 
         float q [4]   {1.0f, 0.0f, 0.0f, 0.0f};    // 姿态四元数
         float bg[3]   {0.0f, 0.0f, 0.0f};              // 陀螺零偏
@@ -125,6 +128,7 @@ public:
     QuaternionEkf() = default;
 
     void Init(const Config& config);
+    void InitFromAccel(const Sample& sample);
     void Update(const Sample& sample);
 
     /**
