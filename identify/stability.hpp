@@ -35,9 +35,11 @@ public:
      * @param dt_s    帧间隔 (s)，用于斜率计算
      * @param slope_limit  允许的最大斜率 (°C/s)
      * @param noise_limit  允许的最大极差 (°C)
+     * @param drift_limit  允许的窗口净漂移 (首帧-末帧, °C)
      * @return true  窗口满且稳定
      */
-    bool Check(float temp_c, float dt_s, float slope_limit = 0.01f, float noise_limit = 0.10f)
+    bool Check(float temp_c, float dt_s, float slope_limit = 0.01f, float noise_limit = 0.10f,
+               float drift_limit = 0.50f)
     {
         if (cnt_ < kWinSize) {
             Push(temp_c);
@@ -50,10 +52,14 @@ public:
             if (buf_[i] > mx) mx = buf_[i];
         }
 
+        // 窗口满时 buf_[head_] 是最旧帧，当前帧 - 最旧帧 = 窗口净漂移
+        const float net_drift = temp_c - buf_[head_];
         const float slope = dt_s > 0.0f ? (temp_c - prev_) / dt_s : 0.0f;
         Push(temp_c);
 
-        return std::abs(slope) <= slope_limit && (mx - mn) <= noise_limit;
+        return std::abs(slope) <= slope_limit
+            && (mx - mn) <= noise_limit
+            && std::abs(net_drift) <= drift_limit;
     }
 
     void Reset()
