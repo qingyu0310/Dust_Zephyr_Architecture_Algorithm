@@ -126,6 +126,15 @@ public:
     float GetError()  const { return e_k; }
 
     /**
+     * @brief 运行时设置遗忘因子
+     * @param lambda 遗忘因子，约束 0 < λ ≤ 1，越接近 1 遗忘越慢
+     */
+    void SetLambda(float lambda)
+    {
+        if (lambda > 0.0f && lambda <= 1.0f) lambda_ = lambda;
+    }
+
+    /**
      * @brief 重置全部状态（权重清零、协方差重新初始化），用于多轮辨识
      */
     void Reset(float p_init)
@@ -144,7 +153,7 @@ public:
     }
 
 private:
-    const float lambda_ = 0.99999f;
+    float lambda_ = 0.99999f;
 
     float x_k[n]     {};
     float alpha_k[n] {};

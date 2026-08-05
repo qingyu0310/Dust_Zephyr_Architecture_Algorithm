@@ -69,12 +69,6 @@ public:
 
     void Init(const Config& cfg);
 
-    void SetShadow(const Config& cfg)
-    {
-        shadowCfg_     = cfg;
-        shadowPending_ = true;
-    }
-
     float Calc(float target, float now)
     {
         SetTarget(target);
@@ -102,6 +96,12 @@ public:
     float GetKi()             const { return cfg_.ki; }
     float GetKd()             const { return cfg_.kd; }
     float GetKf()             const { return cfg_.kf; }
+
+	float &GetKp()                  { return cfg_.kp; }
+    float &GetKi()                  { return cfg_.ki; }
+	float &GetKd()                  { return cfg_.kd; }
+    float &GetKf()                  { return cfg_.kf; }
+
     float GetOutMax()         const { return cfg_.outMax; }
     float GetIOutMax()        const { return cfg_.iOutMax; }
     float GetDt()             const { return cfg_.dt; }
@@ -114,8 +114,6 @@ public:
 private:
 
     Config cfg_ {};
-    Config shadowCfg_ {};
-    volatile bool shadowPending_ = false;
 
     float target_        = 0.0f;
     float now_           = 0.0f;

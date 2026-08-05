@@ -143,7 +143,7 @@ float out = pid.Calc(target, now);
 struct Config {
     float torqueK=4.577e-5f;      // M3508 电流→转矩
     float k1Init=1.453e-7f;       // 铜损
-    float k2Init=1.453e-7f;       // 铁损
+    float k2Init=1.453e-7f;       // 转速线性损耗（|ω| 项）
     float k3=3.0f;                // 固定损耗
     float errUpper=50.0f, errLower=0.01f;   // 隶属度阈值
     float rlsLambda=0.99999f;

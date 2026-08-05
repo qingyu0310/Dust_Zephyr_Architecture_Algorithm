@@ -101,7 +101,6 @@ config DUST_MATH_EIGEN
 config DUST_MOD_CTL_POWER
     bool "功率控制器"
     default n
-    select DUST_CTL_PID
     select DUST_ID_RLS
     select DUST_FLT_LPF
     help

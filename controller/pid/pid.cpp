@@ -73,16 +73,10 @@ float Pid::CalcAngle()
 }
 
 /**
- * @brief 公共 PID 计算（双缓冲 → 死区 → 变速积分 → PID → 前馈 → 限幅）
+ * @brief 公共 PID 计算（死区 → 变速积分 → PID → 前馈 → 限幅）
  */
 float Pid::CalcImpl(float error)
 {
-    // 双缓冲切换
-    if (shadowPending_) {
-        cfg_ = shadowCfg_;
-        shadowPending_ = false;
-    }
-
     // 误差
     float absError = fabsf(error);
 
@@ -129,15 +123,14 @@ float Pid::CalcImpl(float error)
 
     // 防卡角: 输出饱和或误差反向时清零
     float absOut = fabsf(out_);
-    if ((cfg_.outMax != 0.0f && absOut >= cfg_.outMax) ||
-        (preError_ > 0.0f && error < 0.0f)             ||
-        (preError_ < 0.0f && error > 0.0f))
+    if ((cfg_.outMax != 0.0f && absOut >= cfg_.outMax) || (preError_ > 0.0f && error < 0.0f) || (preError_ < 0.0f && error > 0.0f))
     {
         integralError_ = 0.0f;
     }
 
     // 积分分离（与 iSpeedThreshHi 功能重叠，关闭一个即可）
-    if (cfg_.iSeparateThresh == 0.0f || absError < cfg_.iSeparateThresh) {
+    if (cfg_.iSeparateThresh == 0.0f || absError < cfg_.iSeparateThresh) 
+	{
         integralError_ += speedRatio * cfg_.dt * error;
         iOut = cfg_.ki * integralError_;
     } else {
