@@ -71,6 +71,8 @@
  * @copyright Copyright (c) 2026
  */
 
+#pragma once
+
 #include <cstdint>
 #include <algorithm>
 #include <cassert>
