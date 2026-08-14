@@ -27,12 +27,15 @@ jobs:
               ${{ github.workspace }}/framework/$m
           done
 
-      # zephyr 树
-      - name: Clone zephyr
+      # west workspace + zephyr 树（west build 必须在 workspace 内，需 .west/config）
+      - name: Setup west workspace
         run: |
-          git clone --depth 1 --branch v4.3.0 https://github.com/zephyrproject-rtos/zephyr.git ${{ github.workspace }}/zephyr
           python3 -m pip install west
+          git clone --depth 1 --branch v4.3.0 https://github.com/zephyrproject-rtos/zephyr.git ${{ github.workspace }}/zephyr
+          mkdir -p ${{ github.workspace }}/.west
+          printf '[manifest]\npath = zephyr\nfile = west.yml\n' > ${{ github.workspace }}/.west/config
           cd ${{ github.workspace }}/zephyr && python3 -m pip install -r scripts/requirements.txt
+          west update
 
       # 骨架工程（sparse 从主仓库拉 ci/，前置：阶段 1.5 已提交主仓库）
       - name: Checkout CI skeleton
