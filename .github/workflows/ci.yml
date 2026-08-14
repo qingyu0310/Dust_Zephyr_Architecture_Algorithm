@@ -1,0 +1,56 @@
+name: Framework Submodule CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '0 3 1 * *'   # 每月定时回归，防长期不动的子模块悄悄失效
+
+jobs:
+  build-native-sim:
+    name: build-native-sim
+    runs-on: ubuntu-latest
+    env:
+      ZEPHYR_BASE: ${{ github.workspace }}/zephyr
+      ZEPHYR_TOOLCHAIN_VARIANT: host   # native_sim 用宿主编译器，免 zephyr-sdk
+    steps:
+      # 当前子模块（放到框架聚合位）
+      - uses: actions/checkout@v4
+        with:
+          path: framework/algorithm
+
+      # 其余五个子模块（统一 clone 全部六子模块，当前子模块在下一步 Pin 当前 SHA）
+      - name: Clone sibling modules
+        run: |
+          for m in drivers modules topic cmd init; do
+            git clone --depth 1 https://github.com/qingyu0310/Dust_Zephyr_Architecture_${m^}.git \
+              ${{ github.workspace }}/framework/$m
+          done
+
+      # zephyr 树
+      - name: Clone zephyr
+        run: |
+          git clone --depth 1 --branch v4.3.0 https://github.com/zephyrproject-rtos/zephyr.git ${{ github.workspace }}/zephyr
+          python3 -m pip install west
+          cd ${{ github.workspace }}/zephyr && python3 -m pip install -r scripts/requirements.txt
+
+      # 骨架工程（sparse 从主仓库拉 ci/，前置：阶段 1.5 已提交主仓库）
+      - name: Checkout CI skeleton
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/qingyu0310/Dust_Zephyr_Tree.git ${{ github.workspace }}/ci_main
+          cd ${{ github.workspace }}/ci_main && git sparse-checkout set ci
+          mv ci ${{ github.workspace }}/ci
+
+      # 当前子模块覆盖到当前 commit（防 master 指针漂移）
+      # PR 事件下 github.sha 是 merge SHA，用 head.sha
+      - name: Pin current submodule
+        run: |
+          cd ${{ github.workspace }}/framework/algorithm
+          git fetch --depth 1 origin ${{ github.event.pull_request.head.sha || github.sha }}
+          git checkout ${{ github.event.pull_request.head.sha || github.sha }}
+
+      # 构建
+      - name: Build native_sim
+        run: |
+          cd ${{ github.workspace }}/ci
+          west build -p always -b native_sim -d ${{ github.workspace }}/build
