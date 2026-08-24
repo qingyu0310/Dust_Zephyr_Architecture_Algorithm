@@ -1,16 +1,19 @@
 # algorithm/ — 算法层
 
+> 更新日期：2026-08-21。本文按当前 `Kconfig`、`CMakeLists.txt` 和源码目录维护。
+
 纯计算模块。提供控制器、滤波器、参数辨识、缓冲区与线性代数等算法封装。
 
 **边界**：只做数学计算和状态更新，**不创建线程、不持有硬件外设句柄**（PWM/UART 等），
-纯数据输入输出。所有算法零硬件依赖，可在仿真或离线环境独立测试。
+纯数据输入输出。算法层本身不依赖硬件句柄；`DUST_CTL_EXECTIMER` 目前只是预留开关，没有独立的
+`ExecTimer` 类实现。
 
 ## 目录
 
 ```
 algorithm/
 ├── buffer/          ← 缓冲区（BipBuffer 双区 / RingBuf FIFO）
-├── controller/      ← 控制器（PID / 功率控制 / 软件定时器 / 执行时间测量）
+├── controller/      ← 控制器（PID / 功率控制 / 软件定时器）
 ├── filter/          ← 滤波器（低通 / 高通 / Kalman / EKF / 四元数姿态）
 ├── identify/        ← 参数辨识（RLS / 电机本体 / 稳定判据）
 ├── math/eigen/      ← 内置 Eigen 线性代数库
@@ -132,7 +135,8 @@ float out = pid.Calc(target, now);
 
 ### PowerCtrl — 功率控制器
 
-单组电机功率控制器：**功率模型预测 + RLS 在线辨识 K1/K2 + 隶属度功率分配 + 受限力矩求解**。
+单组电机功率控制器：**功率模型预测 + RLS 在线辨识 K1/K2 + 隶属度功率分配 + 受限力矩求解**。它消耗
+上游 PID 给出的目标电流和误差，但自身不创建 PID 对象。
 
 **模板**：`template<uint8_t kMotorCount> class alg::power_ctrl::PowerCtrl final`（编译期静态分配，
 零动态内存）。
@@ -141,26 +145,33 @@ float out = pid.Calc(target, now);
 
 ```cpp
 struct Config {
-    float torqueK=4.577e-5f;      // M3508 电流→转矩
-    float k1Init=1.453e-7f;       // 铜损
-    float k2Init=1.453e-7f;       // 转速线性损耗（|ω| 项）
-    float k3=3.0f;                // 固定损耗
-    float errUpper=50.0f, errLower=0.01f;   // 隶属度阈值
-    float rlsLambda=0.99999f;
-    bool  rlsEnable=false;        // false=固定 K1/K2
-    bool  tauOmegaEnable=true;    // 是否含 τ·ω 项
+    float torqueK=4.577e-5f;          // M3508 电流→转矩
+    float k1Init=1.453e-7f;           // 铜损
+    float k2Init=1.453e-7f;           // 转速线性损耗（|ω| 项）
+    float kTauOmegaInit=1.0f;         // τ·ω 耦合项，固定不参与 RLS
+    float k3=3.0f;                    // 固定损耗
+    float errUpper=50.0f, errLower=0.01f;
+    float rlsLambda=0.99999f, pInit=1e-5f;
+    float excMinAbsOmega=0.0f, excMinTau2=0.0f;
+    float powerMax=0.0f, deadzonePower=0.0f, kFloor=1e-5f;
+    bool  fixK2=false;                // true=只辨 k1，固定 k2
+    bool  skipNegPower=false;         // true=预测负功率时跳过 RLS
+    bool  rlsEnable=false;            // false=固定 K1/K2
+    bool  tauOmegaEnable=true;        // 是否含 τ·ω 项
 };
 
 alg::power_ctrl::PowerCtrl<4> ctrl({.rlsEnable=true});
 // 每周期：
 for (i) ctrl.SetMotorData(i, torque, omega, pidErr);   // 喂转矩/角速度/PID 误差
-ctrl.SetMeasuredPower(voltage*current);                // 实测功率
+for (i) ctrl.SetTarget(i, target_current);             // 喂 PID 目标电流
+ctrl.SetMeasuredPower(voltage*current, power_valid);   // 实测功率 + 有效标志
 ctrl.Predict();                                        // 预测功率 + 更新 K1/K2
 ctrl.Allocate(totalBudgetW);                           // 功率分配（超预算解二次方程）
 for (i) float cur = ctrl.GetLimitedCurrent(i);         // 写电机
 ```
 
-**Kconfig**：`DUST_MOD_CTL_POWER`（select `DUST_CTL_PID` + `DUST_ID_RLS` + `DUST_FLT_LPF`）。
+**Kconfig**：`DUST_MOD_CTL_POWER` 当前 select `DUST_ID_RLS` + `DUST_FLT_LPF`。它使用 PID 误差/目标电流作为输入，
+但当前 Kconfig 不自动 select `DUST_CTL_PID`；如果业务线程确实实例化 PID，需要业务开关自己 select `DUST_CTL_PID`。
 
 ### Timer — 软件定时器
 
@@ -179,19 +190,10 @@ while (1) {
 
 **Kconfig**：`DUST_CTL_TIMER`（无依赖）。
 
-### ExecTimer — 执行时间测量
+### DUST_CTL_EXECTIMER — 当前状态
 
-基于 Zephyr cycle 计数器（`k_cycle_get_32()`）测量代码段执行时间。
-
-```cpp
-ExecTimer t(1000);                    // 每 1000 次输出一次
-t.SetStart();
-func();
-t.SetEnd();
-t.PrintTotal();                       // printk "%.3f ms"
-```
-
-**Kconfig**：`DUST_CTL_EXECTIMER`（依赖 Zephyr 内核）。
+`DUST_CTL_EXECTIMER` 仍保留在 `Kconfig` 和 `CMakeLists.txt` 中，但当前源码没有独立 `ExecTimer` 类实现；
+CMake 目前只会追加 `controller/timer` include 目录。需要执行时间测量时，应先补齐实现，或者清理这个预留开关。
 
 ---
 
@@ -310,7 +312,7 @@ bool ok = stable.Check(temp_c, dt_s);
 | --- | --- | --- |
 | `DUST_BUF_BIPBUF` | BipBuffer 双区环形缓冲 | 无 |
 | `DUST_BUF_RINGBUF` | 环形缓冲 FIFO | 无 |
-| `DUST_CTL_EXECTIMER` | 代码段执行时间测量 | Zephyr 内核 |
+| `DUST_CTL_EXECTIMER` | 预留开关；当前源码未提供独立 ExecTimer 类 | 当前 CMake 只追加 `controller/timer` include |
 | `DUST_CTL_PID` | 位置式 PID | 无 |
 | `DUST_CTL_TIMER` | 软件定时器 | 无 |
 | `DUST_FLT_HPF` | 一阶高通 | 无 |
@@ -322,10 +324,10 @@ bool ok = stable.Check(temp_c, dt_s);
 | `DUST_ID_MOTOR_PLANT` | 电机本体辨识 | `DUST_ID_RLS` |
 | `DUST_ID_STABILITY` | 稳定判据 + 波形发生器 | 无 |
 | `DUST_MATH_EIGEN` | Eigen 线性代数库 | 无 |
-| `DUST_MOD_CTL_POWER` | 功率控制器 | `DUST_CTL_PID`+`DUST_ID_RLS`+`DUST_FLT_LPF` |
+| `DUST_MOD_CTL_POWER` | 功率控制器 | `DUST_ID_RLS`+`DUST_FLT_LPF` |
 
-**依赖链是单向的**：`MATH_EIGEN` 最底层（被 Kalman/EKF/RLS select）；`KALMAN_EKF` 依赖
-`KALMAN`（被 `QUATERNION` select）；`RLS` 被 `MOTOR_PLANT` 和 `MOD_CTL_POWER` select。
+**依赖链是单向的**：`MATH_EIGEN` 最底层（被 Kalman/EKF/RLS select）；`KALMAN_EKF` 被
+`QUATERNION` select；`RLS` 被 `MOTOR_PLANT` 和 `MOD_CTL_POWER` select。
 
 **使用方式**：业务线程在 `project/Kconfig` 里 `select DUST_CTL_PID=y` 等；带 select 的符号自动
 拉起依赖。CMake 按符号把对应 include 目录/源文件加进 app（大部分 header-only，少数有 .cpp：
@@ -335,7 +337,7 @@ bool ok = stable.Check(temp_c, dt_s);
 
 ## 设计原则
 
-- **零硬件依赖** — 算法只依赖 C/C++ 标准库（ExecTimer 例外，用 Zephyr 内核计时），可在仿真/离线测试。
+- **零硬件依赖** — 算法只依赖 C/C++ 基础库和传入数据；`DUST_CTL_EXECTIMER` 当前只是预留开关，未形成可用类。
 - **opt-in 裁剪** — 一个 Kconfig 符号 = 一个可裁剪模块，默认不引入任何代码。
 - **编译期静态** — 模板定维（Kalman/RLS/RingBuf/PowerCtrl），无动态分配，适合嵌入式。
 - **头文件为主** — 大多数模块 header-only，模板实例化由使用方控制。
