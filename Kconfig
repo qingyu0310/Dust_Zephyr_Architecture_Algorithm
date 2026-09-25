@@ -28,6 +28,14 @@ config DUST_CTL_PID
     help
         位置式PID控制器，支持微分先行/积分分离/变速积分/D项低通滤波
 
+config DUST_CTL_LQR
+    bool "LQR controller"
+    default n
+    select DUST_MATH_EIGEN
+    help
+        模板化离散线性二次型调节器（LQR），使用 Eigen 固定维度矩阵
+        求解 Riccati 方程并计算状态反馈增益。
+
 config DUST_CTL_TIMER
     bool "软件定时器"
     default n

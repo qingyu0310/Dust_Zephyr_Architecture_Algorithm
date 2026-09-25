@@ -15,6 +15,10 @@ if(CONFIG_DUST_CTL_PID)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/pid)
 endif()
 
+if(CONFIG_DUST_CTL_LQR)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/lqr)
+endif()
+
 if(CONFIG_DUST_CTL_TIMER)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/controller/timer)
 endif()
