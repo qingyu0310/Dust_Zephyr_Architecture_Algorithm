@@ -65,6 +65,10 @@ if(CONFIG_DUST_ID_STABILITY)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/identify)
 endif()
 
+if(CONFIG_DUST_OBS_ESO)
+	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/observer/eso)
+endif()
+
 if(CONFIG_DUST_MATH_EIGEN)
 	target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/math/eigen)
 endif()

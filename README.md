@@ -1,8 +1,8 @@
 # algorithm/ — 算法层
 
-> 更新日期：2026-08-21。本文按当前 `Kconfig`、`CMakeLists.txt` 和源码目录维护。
+> 更新日期：2026-10-05。本文按当前 `Kconfig`、`CMakeLists.txt` 和源码目录维护。
 
-纯计算模块。提供控制器、滤波器、参数辨识、缓冲区与线性代数等算法封装。
+纯计算模块。提供控制器、观测器、滤波器、参数辨识、缓冲区与线性代数等算法封装。
 
 **边界**：只做数学计算和状态更新，**不创建线程、不持有硬件外设句柄**（PWM/UART 等），
 纯数据输入输出。算法层本身不依赖硬件句柄；`DUST_CTL_EXECTIMER` 目前只是预留开关，没有独立的
@@ -15,6 +15,7 @@ algorithm/
 ├── buffer/          ← 缓冲区（BipBuffer 双区 / RingBuf FIFO）
 ├── controller/      ← 控制器（PID / 功率控制 / 软件定时器）
 ├── filter/          ← 滤波器（低通 / 高通 / Kalman / EKF / 四元数姿态）
+├── observer/        ← 观测器（线性扩张状态观测器 LESO）
 ├── identify/        ← 参数辨识（RLS / 电机本体 / 稳定判据）
 ├── math/eigen/      ← 内置 Eigen 线性代数库
 ├── CMakeLists.txt   ← 按 Kconfig 开关追加 include/sources
@@ -253,6 +254,31 @@ auto& st = qekf.GetState();       // st.roll/pitch/yaw (deg), st.q[4], st.bg[3]
 
 ---
 
+## observer/ — 观测器
+
+### Eso — 线性扩张状态观测器（LESO）
+
+模板化 N 阶线性 ESO，**带宽参数化**：全部观测器极点配置到 −ωo，增益
+`β_i = C(kN, i)·ωo^i`，只需一个带宽 ωo，不必逐项调参。
+
+被控对象 `y^(kN-1) = b0·u + f`，ESO 阶数 `kN = 对象阶数 + 1`，状态
+`z1..z_{kN-1}` 为被控量及各阶导估计、`z_kN` 为总扰动估计。前向欧拉离散，header-only 无依赖。
+
+**模板**：`template<uint8_t kN> class alg::observer::Eso final`。
+
+```cpp
+// 一阶对象（速度环）: ω' = b0·u + f
+alg::observer::Eso<2> eso(100.0f, 0.001f, 50.0f);   // ωo (rad/s), dt (s), b0
+eso.Update(omega_meas, u);                          // 每控制周期
+float omega_est = eso.GetEstimate();                // z1: 被控量估计
+float f_est     = eso.GetDisturbance();             // z2: 总扰动估计
+// eso.GetState(i) 取第 i 个状态；eso.SetB0(b0) 运行时改控制增益；eso.Reset() 清零
+```
+
+**Kconfig**：`DUST_OBS_ESO`（header-only 无依赖）。
+
+---
+
 ## identify/ — 参数辨识
 
 ### RLS — 递归最小二乘
@@ -323,6 +349,7 @@ bool ok = stable.Check(temp_c, dt_s);
 | `DUST_ID_RLS` | 递归最小二乘 | `DUST_MATH_EIGEN` |
 | `DUST_ID_MOTOR_PLANT` | 电机本体辨识 | `DUST_ID_RLS` |
 | `DUST_ID_STABILITY` | 稳定判据 + 波形发生器 | 无 |
+| `DUST_OBS_ESO` | 线性扩张状态观测器（LESO） | 无 |
 | `DUST_MATH_EIGEN` | Eigen 线性代数库 | 无 |
 | `DUST_MOD_CTL_POWER` | 功率控制器 | `DUST_ID_RLS`+`DUST_FLT_LPF` |
 

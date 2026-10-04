@@ -1,6 +1,6 @@
 # algorithm/ 架构说明
 
-> 更新日期：2026-08-21
+> 更新日期：2026-10-05
 > 依据文件：`framework/algorithm/Kconfig`、`framework/algorithm/CMakeLists.txt` 和当前源码目录。
 
 ## 职责
@@ -12,6 +12,7 @@
 - `buffer/`：`BipBuffer` 双区连续缓冲、`RingBuf` FIFO。
 - `controller/`：`Pid`、`PowerCtrl<N>`、协作式 `Timer`。
 - `filter/`：一阶 LPF/HPF、标准 `Kalman<N,M>`、`ExtendedKalman<N,M,U>`、`QuaternionEkf`。
+- `observer/`：`Eso<N>` 模板化 N 阶线性扩张状态观测器（LESO，带宽参数化）。
 - `identify/`：`RLS<N>`、`MotorPlant`、`stability::WinStable` 和波形发生器。
 - `math/eigen/`：内置 Eigen header-only 线性代数库。
 
@@ -41,6 +42,8 @@ algorithm/
 │   ├── lpf/lpf.hpp
 │   ├── kalman/kalman.hpp + kalman_ekf.hpp + kalman_check.cpp
 │   └── quaternion/quaternion.hpp + quaternion.cpp
+├── observer/
+│   └── eso/eso.hpp
 ├── identify/
 │   ├── rls/rls.hpp
 │   ├── motor/motorplant.hpp + motorplant.cpp
@@ -64,6 +67,7 @@ algorithm/
 | `DUST_ID_RLS` | select `DUST_MATH_EIGEN` |
 | `DUST_ID_MOTOR_PLANT` | select `DUST_ID_RLS`，编译 `motorplant.cpp` |
 | `DUST_MOD_CTL_POWER` | select `DUST_ID_RLS` 和 `DUST_FLT_LPF`；消耗 PID 目标/误差，但不实例化 PID，也不 select `DUST_CTL_PID` |
+| `DUST_OBS_ESO` | header-only，无依赖 |
 
 ## 调用方
 

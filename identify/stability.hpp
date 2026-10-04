@@ -57,9 +57,7 @@ public:
         const float slope = dt_s > 0.0f ? (temp_c - prev_) / dt_s : 0.0f;
         Push(temp_c);
 
-        return std::abs(slope) <= slope_limit
-            && (mx - mn) <= noise_limit
-            && std::abs(net_drift) <= drift_limit;
+        return std::abs(slope) <= slope_limit && (mx - mn) <= noise_limit && std::abs(net_drift) <= drift_limit;
     }
 
     void Reset()

@@ -113,3 +113,10 @@ config DUST_MOD_CTL_POWER
     select DUST_FLT_LPF
     help
         电机功率控制，包含功率模型预测/RLS参数辨识/隶属度分配/受限力矩求解
+
+config DUST_OBS_ESO
+    bool "线性扩张状态观测器"
+    default n
+    help
+        模板化 N 阶线性扩张状态观测器（LESO），带宽参数化。
+        估计被控量各阶状态与总扰动，用于 ADRC 扰动补偿。
