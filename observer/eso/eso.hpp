@@ -16,7 +16,7 @@
  *      ż2     = z3     - β2·(z1 - y)
  *      ...
  *      ż_kN-1 = z_kN   - β_kN-1·(z1 - y) + b0·u
- *      ż_kN   =          - β_kN·(z1 - y)
+ *      ż_kN   =        - β_kN·(z1 - y)
  *
  *      带宽参数化（Gao）: 全部极点配置到 -ωo，β_i = C(kN, i)·ωo^i，
  *      只需一个观测器带宽 ωo，避免逐项调参。
@@ -116,7 +116,7 @@ public:
 	 *
      */
     float GetState(uint8_t i) const { return (i < kN) ? z_[i] : 0.0f; }
-	
+
     /**
      * @brief 被控量估计 z1
 	 *
