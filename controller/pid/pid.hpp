@@ -97,10 +97,10 @@ public:
     float GetKd()             const { return cfg_.kd; }
     float GetKf()             const { return cfg_.kf; }
 
-	float &GetKp()                  { return cfg_.kp; }
-    float &GetKi()                  { return cfg_.ki; }
-	float &GetKd()                  { return cfg_.kd; }
-    float &GetKf()                  { return cfg_.kf; }
+	constexpr float &GetKp()        { return cfg_.kp; }
+    constexpr float &GetKi()        { return cfg_.ki; }
+	constexpr float &GetKd()        { return cfg_.kd; }
+    constexpr float &GetKf()        { return cfg_.kf; }
 
     float GetOutMax()         const { return cfg_.outMax; }
     float GetIOutMax()        const { return cfg_.iOutMax; }
