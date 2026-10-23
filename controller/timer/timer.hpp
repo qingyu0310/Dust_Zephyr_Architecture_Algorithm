@@ -143,7 +143,8 @@ private:
 
     void UpdatePeriod()
     {
-        if (is_period_finish_) {
+        if (is_period_finish_) 
+		{
             if (is_period_changed_) {
                 period_ = period_buffer_;
                 is_period_changed_ = false;
