@@ -68,6 +68,8 @@ public:
     explicit Pid(const Config& cfg);
 
     void Init(const Config& cfg);
+    void Reset();                               // 清除积分、微分及输出历史，保留目标值和测量值
+    void SetDt(float dt);                       // 更新实际控制周期，同时重算微分滤波系数
 
     float Calc(float target, float now)
     {
@@ -78,14 +80,20 @@ public:
 
     float Calc();
 
+    float Calc(float target, float now, float dt)
+    {
+        SetDt(dt);
+        return Calc(target, now);
+    }
+
     float CalcAngle();
 
     void SetKp(float v)             { cfg_.kp = v; }
     void SetKi(float v)             { cfg_.ki = v; }
     void SetKd(float v)             { cfg_.kd = v; }
     void SetKf(float v)             { cfg_.kf = v; }
-    void SetIOutMax(float v)        { cfg_.iOutMax = v; }
-    void SetOutMax(float v)         { cfg_.outMax = v; }
+    void SetIOutMax(float v)        { cfg_.iOutMax = (v < 0.0f) ? -v : v; }
+    void SetOutMax(float v)         { cfg_.outMax = (v < 0.0f) ? -v : v; }
     void SetTarget(float v)         { target_ = v; }
     void SetNow(float v)            { now_ = v; }
     void SetIntegralError(float v)  { integralError_ = v; }
@@ -128,7 +136,10 @@ private:
     float dLpfAlpha_     = 0.0f;
     float dLpfOutput_    = 0.0f;
 
-    float CalcImpl(float error);
+    bool historyReady_  = false;
+    bool angleMode_     = false;
+
+    float CalcImpl(float error, bool angle);
 };
 
 } // namespace alg::pid
