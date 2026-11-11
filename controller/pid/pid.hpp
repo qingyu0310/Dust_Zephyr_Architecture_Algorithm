@@ -14,8 +14,12 @@
 
 namespace alg::pid {
 
-/// 微分先行模式（避免目标值突变引起的微分冲击）
-enum class DFirst : uint8_t {
+/**
+ * @brief 微分先行模式（避免目标值突变引起的微分冲击）
+ * 
+ */
+enum class DFirst : uint8_t 
+{
     Disable = 0,  // D 作用于误差
     Enable,       // D 作用于测量值（推荐用于定值跟踪）
 };
@@ -43,7 +47,7 @@ class Pid final
 {
 public:
     /**
- * @brief PID 配置参数（全部有默认值）
+ 	 * @brief PID 配置参数（全部有默认值）
      *
      * @note 推荐使用 C++20 指定初始化器：
      *       @c Pid::Config{.kp=3, .ki=0.1, .outMax=60}
