@@ -53,6 +53,9 @@
 #pragma message "Compiling Algorithm/Filter/ExtendedKalman"
 
 #include <Eigen/Dense>
+#include <cmath>
+#include <limits>
+#include <stdint.h>
 
 namespace alg::filter {
 
@@ -138,6 +141,8 @@ public:
         HT_.setZero();
         K_.setZero();
         S_.setZero();
+        chi2_ = 0.0f;
+        k_scale_ = 1.0f;
     }
 
     // 预测 / 校正
@@ -176,34 +181,78 @@ public:
      */
     void Update()
     {
+        UpdateWithGate(std::numeric_limits<float>::infinity(), false);
+    }
+
+    /**
+     * @brief 使用本帧创新门控，并在更新状态和协方差前缩放本帧增益
+     * @param chi2_limit 卡方阈值；无穷大表示仅检查数值有效性
+     * @param adaptive  按本帧卡方值衰减增益
+     * @param max_step  状态校正向量的范数上限
+     * @return true=接受观测；false=保留预测和原始卡方诊断
+     */
+    bool UpdateWithGate(float chi2_limit, bool adaptive, float max_step = std::numeric_limits<float>::infinity())
+    {
+        FallbackToPrediction();
+        chi2_ = -1.0f;
+
+        const float requested_scale = k_scale_;
+        k_scale_ = 0.0f;
+
         observe_func_(x_minus_, z_pred_, H_);
         HT_.noalias() = H_.transpose();
-
-        S_.noalias() = H_ * P_minus_ * HT_;
+        S_.noalias()  = H_ * P_minus_ * HT_;
         S_ += R_;
         MakeSymmetric(S_);
 
         auto solver = S_.ldlt();
-        if (solver.info() != Eigen::Success) return;
-        if (solver.vectorD().minCoeff() <= 0.0f) return;
+        if (solver.info() != Eigen::Success || solver.vectorD().minCoeff() <= 0.0f) return false;
+
+        const Obs   innov = z_ - z_pred_;
+        const float chi2  = innov.dot(solver.solve(innov));
+        if (!std::isfinite(chi2) || chi2 < 0.0f) {
+			return false;
+		}
+
+        chi2_ = chi2;
+        if (chi2 > chi2_limit) {
+			return false;
+		}
+
         K_.noalias() = P_minus_ * HT_;
-        K_ = solver.solve(K_.transpose()).transpose();
-        if (k_scale_ != 1.0f) K_ *= k_scale_;
+        K_ = solver.solve(K_.transpose()).transpose().eval();
+        if (!K_.allFinite()) {
+			return false;
+		}
 
-        const Obs innov = z_ - z_pred_;
-        x_ = x_minus_ + K_ * innov;
+        float scale = requested_scale;
+        if (adaptive && chi2_limit > 0.0f && chi2 > 0.1f * chi2_limit) {
+			scale *= (chi2_limit - chi2) / (0.9f * chi2_limit);
+		}
 
-        // 卡方值 χ² = innovᵀ · S⁻¹ · innov
-        chi2_ = innov.dot(solver.solve(innov));
+        K_ *= scale;
+        const State correction = K_ * innov;
+        const float step       = correction.norm();
 
-        // Joseph 形式协方差更新：P = (I-KH)·P⁻·(I-KH)ᵀ + K·R·Kᵀ
-        // 保证 P 半正定，避免大 K 时标准公式的数值对消问题
-        {
-            const auto I_KH = Cov::Identity() - K_ * H_;
-            P_.noalias() = I_KH * P_minus_ * I_KH.transpose() + K_ * R_ * K_.transpose();
+        if (!std::isfinite(step)) {
+			return false;
+		}
+
+        if (step > max_step && step > 0.0f) {
+            const float limit_scale = max_step / step;
+            K_ *= limit_scale;
+            scale *= limit_scale;
         }
 
+        x_ = x_minus_ + K_ * innov;
+        k_scale_ = scale;
+
+        // 状态限速后，Joseph 协方差也必须使用同一个实际增益。
+        const Cov I_KH = Cov::Identity() - K_ * H_;
+        P_.noalias() = I_KH * P_minus_ * I_KH.transpose() + K_ * R_ * K_.transpose();
+
         ClampCovariance();
+        return true;
     }
 
     /**
@@ -251,6 +300,7 @@ public:
      * @param s  缩放系数，<1 削弱校正幅值
      */
     inline void SetGainScale(float s) { k_scale_ = s; }
+    inline float GetGainScale() const { return k_scale_; }
 
     /**
      * @brief 获取先验协方差的引用（用于渐消因子等外部修改）
@@ -262,6 +312,11 @@ public:
      * @param x0  状态初值
      */
     inline void SetState(const State& x0) { x_ = x0; x_minus_ = x0; }
+
+    /**
+     * @brief 仅写回后验（如四元数归一化），保留先验供门控回退
+     */
+    inline void SetPosteriorState(const State& x) { x_ = x; }
 
     /**
      * @brief 回退到预测值（卡方门控发散时使用）

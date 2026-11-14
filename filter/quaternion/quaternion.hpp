@@ -18,12 +18,12 @@ namespace alg::attitude {
 /**
  * @brief 基于四元数的 IMU 姿态扩展 Kalman 滤波器。
  *
- * @par 状态空间 (n = 6)
- *   x = [q0, q1, q2, q3, bg_x, bg_y]ᵀ
+ * @par 状态空间 (n = 4)
+ *   x = [q0, q1, q2, q3]ᵀ
  *     - q: 单位四元数 (姿态)
- *     - bg: 陀螺零偏 (仅 x/y 可观)
+ *   — 陀螺零偏由驱动层静态标定，不进滤波状态，避免观测把姿态误差错误归因于零偏
  *
- * @par 输入空间 (p = 3)
+ * @par 输入空间 (p = 4)
  *   u = [ωx·dt, ωy·dt, ωz·dt, dt]ᵀ
  *   — 去偏角速度积分与采样周期
  *
@@ -33,7 +33,6 @@ namespace alg::attitude {
  *
  * @par 系统模型 (RK1 四元数积分)
  *   q'  = q + ½ · Ω(ω) · q · dt
- *   bg' = bg
  *   其中 Ω(ω) 为角速度的斜对称矩阵：
  *     Ω(ω) = [ 0,  -ωx, -ωy, -ωz;
  *              ωx,  0,   ωz, -ωy;
@@ -47,7 +46,7 @@ namespace alg::attitude {
  *   — 将重力向量从导航系旋转到机体系
  *
  * @par 滤波引擎
- *   内部使用 ExtendedKalman<6, 3, 3>：
+ *   内部使用 ExtendedKalman<4, 3, 4>：
  *   - SystemFunc:  四元数运动学积分 + F Jacobian
  *   - ObserveFunc: 重力方向预测 + H Jacobian
  */
@@ -59,12 +58,8 @@ public:
      */
     struct Config {
         // 核心调参
-        float Qq            = 10.0f;        // 四元数过程噪声，越大越信任陀螺
-        float Qb            = 0.001f;       // 零偏过程噪声，越大零偏跟踪越快
-        float R             = 1000000.0f;   // 四元数过程噪声，越大越不信任陀螺预测，越依赖观测修正
-
-        // 高级调参
-        float lambda        = 1.0f;         // 渐消因子（≤1），<1 防零偏协方差收敛死
+        float Qq            = 10.0f;        // 四元数过程噪声，越大通常使观测校正增益增大
+        float R             = 1000000.0f;   // 观测噪声，越大越不信任加速度，越依赖陀螺预测
 
         // 前处理
         float alpha         = 0.0f;         // 加速度 LPF 系数
@@ -72,15 +67,14 @@ public:
         // 卡方检验门控
         float chi2_th       = 1e-8f;        // 卡方检验阈值，χ² 超此值认为观测异常
         uint32_t div_limit  = 50;           // 发散判定次数阈值
+        float recovery_time = 1.0f;         // 严格静止持续此秒数后允许倾角恢复
+        float correction_rate = 1.0f;       // 观测导致的姿态校正速率上限 (deg/s)
 
         // 稳定检测
         float w_stable_th   = 0.3f;         // 角速度稳定阈值 (rad/s)
         float a_ref         = 9.8f;         // 加速度稳定参考值，重力加速度常量
         float a_tol         = 0.5f;         // 加速度稳定容差
 
-        // 安全限幅
-        float bias_limit    = 1e-2f;        // 零偏单步修正上限，防单帧跳变过大
-        float Pb_limit      = 10000.0f;     // 零偏协方差上限，防发散失控
     };
 
     /**
@@ -106,7 +100,8 @@ public:
         float alpha   = 0.0f;               // 加速度 LPF 系数
         float w_norm  = 0.0f;               // 角速度幅值 |ω|
         float a_norm  = 0.0f;               // 加速度幅值 |a|
-        float k_scale = 1.0f;               // 自适应增益系数
+        float k_scale = 1.0f;               // 本帧实际增益缩放（门控/自适应/限速）
+        float quiet_time = 0.0f;            // 连续严格静止时间 (s)
 
         float roll    = 0.0f;               // 滚转角 (deg)
         float pitch   = 0.0f;               // 俯仰角 (deg)
@@ -114,12 +109,10 @@ public:
         float yaw_sum = 0.0f;               // 偏航累积角 (deg)
 
         float Qq      = 10.0f;              // 四元数过程噪声
-        float Qb      = 0.001f;             // 零偏过程噪声
         float R       = 1000000.0f;         // 观测噪声
         float dt      = 0.0f;               // 采样周期 (s)
-        float chi2    = 0.0f;               // 卡方检验值 χ²
+        float chi2    = 0.0f;               // 原始卡方值 χ²；-1 表示数值求解失败
         float chi2_th = 1e-8f;              // 卡方检验阈值
-        float lambda  = 1.0f;               // 渐消因子
 
         int16_t yaw_rnd  = 0;               // 偏航绕圈计数
         float   yaw_prev = 0.0f;            // 上一帧偏航角
@@ -138,14 +131,14 @@ public:
     State&       GetState()       { return state_; }
 
 private:
-    static constexpr uint8_t kStateSize       = 6;  // 状态维数 (4 四元数 + 2 零偏)
+    static constexpr uint8_t kStateSize       = 4;  // 状态维数 (仅四元数，零偏由驱动层标定)
     static constexpr uint8_t kMeasurementSize = 3;  // 观测维数 (归一化加速度)
     static constexpr uint8_t kControlSize     = 4;  // 控制输入 [ω·dt, dt]
 
     // 内部 EKF 类型别名
     using EKF    = alg::filter::ExtendedKalman<kStateSize, kMeasurementSize, kControlSize>;
-    using EkfSt  = EKF::State;                      // EKF 状态向量类型  6×1
-    using EkfCov = EKF::Cov;                        // EKF 协方差类型    6×6
+    using EkfSt  = EKF::State;                      // EKF 状态向量类型  4×1
+    using EkfCov = EKF::Cov;                        // EKF 协方差类型    4×4
 
     Config config_;                                 // 配置参数
     State  state_ {};                               // 运行时状态
@@ -154,7 +147,7 @@ private:
     static void  SystemFunc(const EkfSt& x_in, const EKF::Ctrl& u_in, EkfSt& x_out, EkfCov& F_out);
     static void  ObserveFunc(const EkfSt& x_in, EKF::Obs& z_out, EKF::ObsMat& H_out);
     static void  NormalizeQuaternion(EkfSt& x);
-    static float FastInverseSqrt(float x);
+    static float InverseSqrt(float x);
 };
 
 } // namespace alg::attitude
