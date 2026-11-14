@@ -111,7 +111,7 @@ public:
     uint32_t GetPeriod() const { return period_; }
     uint32_t GetCounter() const { return count_; }
     
-    bool IsFinish() const { return is_period_finish_; }
+    bool IsFinish()  const { return is_period_finish_; }
     bool IsRunning() const { return is_running_; }
 
     void Reset() { count_ = 0; }
