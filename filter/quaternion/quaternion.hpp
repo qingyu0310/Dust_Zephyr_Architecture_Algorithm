@@ -91,10 +91,10 @@ public:
         bool converg = false;               // 已收敛标志
         bool stable  = false;               // IMU 稳定标志
 
-        uint64_t err_cnt  = 0;              // 连续发散计数
-        uint64_t upd_cnt  = 0;              // 更新次数
+        uint64_t err_cnt = 0;               // 连续发散计数
+        uint64_t upd_cnt = 0;               // 更新次数
         uint16_t yaw_bias_static_cnt = 0;   // 连续静止样本数
-        float   bgz_sum = 0.0f;             // 静止期 gz 累积和（滑动均值用）
+        float    bgz_sum = 0.0f;            // 静止期 gz 累积和（滑动均值用）
         uint32_t bgz_cnt = 0;               // 静止期 gz 样本计数
 
         float q [4]   {1.0f, 0.0f, 0.0f, 0.0f};    // 姿态四元数
